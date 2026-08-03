@@ -9,7 +9,6 @@ import (
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -19,15 +18,13 @@ import (
 
 // PaymentHandler handles user-facing payment requests.
 type PaymentHandler struct {
-	channelService *service.ChannelService
 	paymentService *service.PaymentService
 	configService  *service.PaymentConfigService
 }
 
 // NewPaymentHandler creates a new PaymentHandler.
-func NewPaymentHandler(paymentService *service.PaymentService, configService *service.PaymentConfigService, channelService *service.ChannelService) *PaymentHandler {
+func NewPaymentHandler(paymentService *service.PaymentService, configService *service.PaymentConfigService) *PaymentHandler {
 	return &PaymentHandler{
-		channelService: channelService,
 		paymentService: paymentService,
 		configService:  configService,
 	}
@@ -67,6 +64,7 @@ func (h *PaymentHandler) GetPlans(c *gin.Context) {
 		Description        string   `json:"description"`
 		Price              float64  `json:"price"`
 		OriginalPrice      *float64 `json:"original_price,omitempty"`
+		Currency           string   `json:"currency,omitempty"`
 		ValidityDays       int      `json:"validity_days"`
 		ValidityUnit       string   `json:"validity_unit"`
 		Features           string   `json:"features"`
@@ -84,22 +82,12 @@ func (h *PaymentHandler) GetPlans(c *gin.Context) {
 			RateMultiplier: gi.RateMultiplier, PeakRateEnabled: gi.PeakRateEnabled,
 			PeakStart: gi.PeakStart, PeakEnd: gi.PeakEnd, PeakRateMultiplier: gi.PeakRateMultiplier,
 			Name: p.Name, Description: p.Description, Price: p.Price, OriginalPrice: p.OriginalPrice,
+			Currency:     p.Currency,
 			ValidityDays: p.ValidityDays, ValidityUnit: p.ValidityUnit, Features: p.Features,
 			ProductName: p.ProductName, ForSale: p.ForSale, SortOrder: p.SortOrder,
 		})
 	}
 	response.Success(c, result)
-}
-
-// GetChannels returns enabled payment channels.
-// GET /api/v1/payment/channels
-func (h *PaymentHandler) GetChannels(c *gin.Context) {
-	channels, _, err := h.channelService.List(c.Request.Context(), pagination.PaginationParams{Page: 1, PageSize: 1000}, "active", "")
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	response.Success(c, channels)
 }
 
 // GetCheckoutInfo returns all data the payment page needs in a single call:
@@ -121,6 +109,14 @@ func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	alipayMobilePrecreateDeepLink := false
+	if cfg.AlipayMobilePrecreateDeepLink {
+		alipayMobilePrecreateDeepLink, err = h.configService.UsesOfficialAlipayVisibleMethod(ctx)
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+	}
 
 	// Fetch plans with group info
 	plans, _ := h.configService.ListPlansForSale(ctx)
@@ -138,40 +134,43 @@ func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {
 			WeeklyLimitUSD: gi.WeeklyLimitUSD, MonthlyLimitUSD: gi.MonthlyLimitUSD,
 			ModelScopes: gi.ModelScopes,
 			Name:        p.Name, Description: p.Description, Price: p.Price, OriginalPrice: p.OriginalPrice,
+			Currency:     p.Currency,
 			ValidityDays: p.ValidityDays, ValidityUnit: p.ValidityUnit, Features: parseFeatures(p.Features),
 			ProductName: p.ProductName,
 		})
 	}
 
 	response.Success(c, checkoutInfoResponse{
-		Methods:                   limitsResp.Methods,
-		GlobalMin:                 limitsResp.GlobalMin,
-		GlobalMax:                 limitsResp.GlobalMax,
-		Plans:                     planList,
-		BalanceDisabled:           cfg.BalanceDisabled,
-		BalanceRechargeMultiplier: cfg.BalanceRechargeMultiplier,
-		SubscriptionUSDToCNYRate:  cfg.SubscriptionUSDToCNYRate,
-		RechargeFeeRate:           cfg.RechargeFeeRate,
-		HelpText:                  cfg.HelpText,
-		HelpImageURL:              cfg.HelpImageURL,
-		StripePublishableKey:      cfg.StripePublishableKey,
-		AlipayForceQRCode:         cfg.AlipayForceQRCode,
+		Methods:                       limitsResp.Methods,
+		GlobalMin:                     limitsResp.GlobalMin,
+		GlobalMax:                     limitsResp.GlobalMax,
+		Plans:                         planList,
+		BalanceDisabled:               cfg.BalanceDisabled,
+		BalanceRechargeMultiplier:     cfg.BalanceRechargeMultiplier,
+		SubscriptionUSDToCNYRate:      cfg.SubscriptionUSDToCNYRate,
+		RechargeFeeRate:               cfg.RechargeFeeRate,
+		HelpText:                      cfg.HelpText,
+		HelpImageURL:                  cfg.HelpImageURL,
+		StripePublishableKey:          cfg.StripePublishableKey,
+		AlipayForceQRCode:             cfg.AlipayForceQRCode,
+		AlipayMobilePrecreateDeepLink: alipayMobilePrecreateDeepLink,
 	})
 }
 
 type checkoutInfoResponse struct {
-	Methods                   map[string]service.MethodLimits `json:"methods"`
-	GlobalMin                 float64                         `json:"global_min"`
-	GlobalMax                 float64                         `json:"global_max"`
-	Plans                     []checkoutPlan                  `json:"plans"`
-	BalanceDisabled           bool                            `json:"balance_disabled"`
-	BalanceRechargeMultiplier float64                         `json:"balance_recharge_multiplier"`
-	SubscriptionUSDToCNYRate  float64                         `json:"subscription_usd_to_cny_rate"`
-	RechargeFeeRate           float64                         `json:"recharge_fee_rate"`
-	HelpText                  string                          `json:"help_text"`
-	HelpImageURL              string                          `json:"help_image_url"`
-	StripePublishableKey      string                          `json:"stripe_publishable_key"`
-	AlipayForceQRCode         bool                            `json:"alipay_force_qrcode"`
+	Methods                       map[string]service.MethodLimits `json:"methods"`
+	GlobalMin                     float64                         `json:"global_min"`
+	GlobalMax                     float64                         `json:"global_max"`
+	Plans                         []checkoutPlan                  `json:"plans"`
+	BalanceDisabled               bool                            `json:"balance_disabled"`
+	BalanceRechargeMultiplier     float64                         `json:"balance_recharge_multiplier"`
+	SubscriptionUSDToCNYRate      float64                         `json:"subscription_usd_to_cny_rate"`
+	RechargeFeeRate               float64                         `json:"recharge_fee_rate"`
+	HelpText                      string                          `json:"help_text"`
+	HelpImageURL                  string                          `json:"help_image_url"`
+	StripePublishableKey          string                          `json:"stripe_publishable_key"`
+	AlipayForceQRCode             bool                            `json:"alipay_force_qrcode"`
+	AlipayMobilePrecreateDeepLink bool                            `json:"alipay_mobile_precreate_deep_link"`
 }
 
 type checkoutPlan struct {
@@ -192,6 +191,7 @@ type checkoutPlan struct {
 	Description        string   `json:"description"`
 	Price              float64  `json:"price"`
 	OriginalPrice      *float64 `json:"original_price,omitempty"`
+	Currency           string   `json:"currency,omitempty"`
 	ValidityDays       int      `json:"validity_days"`
 	ValidityUnit       string   `json:"validity_unit"`
 	Features           []string `json:"features"`

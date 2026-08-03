@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"regexp"
@@ -160,6 +161,18 @@ func setGatewayRequestRanges(parsed *ParsedRequest, protocol string, jsonStr str
 	}
 }
 
+const claudeCodeLongContextModelSuffix = "[1m]"
+
+// Claude Code treats [1m] as a client-side context selector and normally removes it
+// before provider requests. Normalize leaked suffixes, including its duplicated form.
+func normalizeClaudeCodeLongContextModel(model string) string {
+	for len(model) > len(claudeCodeLongContextModelSuffix) &&
+		strings.EqualFold(model[len(model)-len(claudeCodeLongContextModelSuffix):], claudeCodeLongContextModelSuffix) {
+		model = model[:len(model)-len(claudeCodeLongContextModelSuffix)]
+	}
+	return model
+}
+
 // parseGatewayRequestCurrentBody 只做标量和 raw range 轻量解析，不恢复 system/messages 对象图。
 func parseGatewayRequestCurrentBody(parsed *ParsedRequest, protocol string) error {
 	if parsed == nil || parsed.Body == nil {
@@ -168,7 +181,7 @@ func parseGatewayRequestCurrentBody(parsed *ParsedRequest, protocol string) erro
 
 	bodyBytes := parsed.Body.Bytes()
 	if !gjson.ValidBytes(bodyBytes) {
-		return fmt.Errorf("invalid json")
+		return DescribeInvalidJSON(bodyBytes)
 	}
 
 	// 只在当前函数内零拷贝读取 JSON 字段；ReplaceBody 后必须重新进入本函数刷新派生状态。
@@ -182,6 +195,19 @@ func parseGatewayRequestCurrentBody(parsed *ParsedRequest, protocol string) erro
 			return fmt.Errorf("invalid model field type")
 		}
 		parsed.Model = modelResult.String()
+		if protocol == domain.PlatformAnthropic {
+			normalizedModel := normalizeClaudeCodeLongContextModel(parsed.Model)
+			if normalizedModel != parsed.Model {
+				normalizedBody, err := sjson.SetBytes(bodyBytes, "model", normalizedModel)
+				if err != nil {
+					return fmt.Errorf("normalize model field: %w", err)
+				}
+				parsed.Body.Replace(normalizedBody)
+				bodyBytes = normalizedBody
+				jsonStr = *(*string)(unsafe.Pointer(&bodyBytes))
+				parsed.Model = normalizedModel
+			}
+		}
 	}
 
 	streamResult := gjson.Get(jsonStr, "stream")
@@ -214,6 +240,26 @@ func parseGatewayRequestCurrentBody(parsed *ParsedRequest, protocol string) erro
 
 func refreshGatewayRequestRanges(parsed *ParsedRequest, protocol string) error {
 	return parseGatewayRequestCurrentBody(parsed, protocol)
+}
+
+// DescribeInvalidJSON returns a diagnostic error for a request body that
+// failed JSON validation. It re-parses with encoding/json (failure path only)
+// to pinpoint the first offending byte, so operators can distinguish genuinely
+// invalid JSON from a truncated / partially consumed body. The error carries
+// only length/offset/character information — never body content — so callers
+// may safely wrap or log it.
+func DescribeInvalidJSON(body []byte) error {
+	var raw json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		var syntaxErr *json.SyntaxError
+		if errors.As(err, &syntaxErr) {
+			return fmt.Errorf("invalid json (len=%d, offset=%d): %s", len(body), syntaxErr.Offset, syntaxErr.Error())
+		}
+		return fmt.Errorf("invalid json (len=%d): %w", len(body), err)
+	}
+	// gjson rejected the body but encoding/json accepted it (divergent edge
+	// cases, e.g. certain malformed UTF-8 sequences); report the basics.
+	return fmt.Errorf("invalid json (len=%d)", len(body))
 }
 
 // ParsedRequest 保存网关请求的预解析结果
