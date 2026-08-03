@@ -50,6 +50,20 @@ func (p *PanelRateLimiter) Global() gin.HandlerFunc {
 	return p.userScoped("global", func(s service.PanelRateLimitSettings) int { return s.UserRPM })
 }
 
+// GlobalExceptRoute applies the global user limiter except for one exact
+// registered route. Matching c.FullPath() instead of the raw URL keeps the
+// exemption bounded across all resource IDs and excludes lookalike paths.
+func (p *PanelRateLimiter) GlobalExceptRoute(method, fullPath string) gin.HandlerFunc {
+	global := p.Global()
+	return func(c *gin.Context) {
+		if c.Request.Method == method && c.FullPath() == fullPath {
+			c.Next()
+			return
+		}
+		global(c)
+	}
+}
+
 // Heavy 重查询接口的按用户限流（严格档，覆盖 usage/dashboard 等聚合统计端点）。
 // 与 Global 叠加计数：一次重查询同时消耗两档额度。
 func (p *PanelRateLimiter) Heavy() gin.HandlerFunc {

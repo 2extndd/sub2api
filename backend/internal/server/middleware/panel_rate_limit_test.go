@@ -313,3 +313,45 @@ func TestIsPubliclyRoutableClientIP(t *testing.T) {
 	require.False(t, isPubliclyRoutableClientIP(""))
 	require.False(t, isPubliclyRoutableClientIP("not-an-ip"))
 }
+
+func TestPanelRateLimiterGlobalExceptRoute(t *testing.T) {
+	allower := &fakePanelAllower{}
+	p := &PanelRateLimiter{
+		limiter:        allower,
+		settingService: newPanelRateLimitTestService(t, `{"enabled":true,"user_rpm":2,"heavy_rpm":1,"exempt_admin":false}`),
+	}
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(ContextKeyUser), AuthSubject{UserID: 42})
+		c.Next()
+	})
+	router.Use(p.GlobalExceptRoute(http.MethodPut, "/api/v1/keys/:id"))
+	router.PUT("/api/v1/keys/:id", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+	router.PUT("/api/v1/user", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+	router.GET("/api/v1/keys/:id", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	for i := 0; i < 4; i++ {
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/keys/1554", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusNoContent, rec.Code)
+	}
+
+	for i, want := range []int{http.StatusNoContent, http.StatusNoContent, http.StatusTooManyRequests} {
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/user", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		require.Equalf(t, want, rec.Code, "non-exempt PUT attempt %d", i+1)
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/keys/1554", nil)
+	getRec := httptest.NewRecorder()
+	router.ServeHTTP(getRec, getReq)
+	require.Equal(t, http.StatusTooManyRequests, getRec.Code)
+
+	allower.mu.Lock()
+	defer allower.mu.Unlock()
+	require.Equal(t, int64(4), allower.counts["panel:global:user:42"])
+}
