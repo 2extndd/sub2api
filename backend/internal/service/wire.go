@@ -422,6 +422,18 @@ func ProvideScheduledTestRunnerService(
 	return svc
 }
 
+// ProvideAccountRecoveryWorker creates and starts the error-only account recovery worker.
+func ProvideAccountRecoveryWorker(
+	accountRepo AccountRepository,
+	accountTestSvc *AccountTestService,
+	rateLimitSvc *RateLimitService,
+	cfg *config.Config,
+) *AccountRecoveryWorker {
+	worker := NewAccountRecoveryWorker(accountRepo, accountTestSvc, rateLimitSvc, cfg)
+	worker.Start()
+	return worker
+}
+
 // ProvideOpsScheduledReportService creates and starts OpsScheduledReportService.
 func ProvideOpsScheduledReportService(
 	opsService *OpsService,
@@ -632,6 +644,7 @@ var ProviderSet = wire.NewSet(
 	ProvideIdempotencyCleanupService,
 	ProvideScheduledTestService,
 	ProvideScheduledTestRunnerService,
+	ProvideAccountRecoveryWorker,
 	NewGroupCapacityService,
 	NewChannelService,
 	NewModelPricingResolver,

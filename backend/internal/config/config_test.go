@@ -81,6 +81,56 @@ func TestLoadDefaultSchedulingConfig(t *testing.T) {
 	}
 }
 
+func TestLoadDefaultAccountRecoveryConfig(t *testing.T) {
+	resetViperWithJWTSecret(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.AccountRecovery.Enabled {
+		t.Fatal("account recovery must be disabled by default")
+	}
+	if cfg.AccountRecovery.IntervalSeconds != 60 || cfg.AccountRecovery.BaseBackoffSeconds != 60 || cfg.AccountRecovery.MaxBackoffSeconds != 1800 {
+		t.Fatalf("unexpected account recovery defaults: %+v", cfg.AccountRecovery)
+	}
+	if cfg.AccountRecovery.ProbeTimeoutSeconds != 90 || cfg.AccountRecovery.MaxWorkers != 2 {
+		t.Fatalf("unexpected account recovery probe defaults: %+v", cfg.AccountRecovery)
+	}
+}
+
+func TestLoadAccountRecoveryRequiresProbeModelWhenEnabled(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("ACCOUNT_RECOVERY_ENABLED", "true")
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "account_recovery.probe_model") {
+		t.Fatalf("Load() error = %v, want account_recovery.probe_model validation error", err)
+	}
+}
+
+func TestLoadAccountRecoveryConfigFromEnv(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("ACCOUNT_RECOVERY_ENABLED", "true")
+	t.Setenv("ACCOUNT_RECOVERY_PROBE_MODEL", "gpt-recovery")
+	t.Setenv("ACCOUNT_RECOVERY_INTERVAL_SECONDS", "30")
+	t.Setenv("ACCOUNT_RECOVERY_BASE_BACKOFF_SECONDS", "45")
+	t.Setenv("ACCOUNT_RECOVERY_MAX_BACKOFF_SECONDS", "900")
+	t.Setenv("ACCOUNT_RECOVERY_PROBE_TIMEOUT_SECONDS", "75")
+	t.Setenv("ACCOUNT_RECOVERY_MAX_WORKERS", "3")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if !cfg.AccountRecovery.Enabled || cfg.AccountRecovery.ProbeModel != "gpt-recovery" {
+		t.Fatalf("unexpected account recovery config: %+v", cfg.AccountRecovery)
+	}
+	if cfg.AccountRecovery.IntervalSeconds != 30 || cfg.AccountRecovery.BaseBackoffSeconds != 45 || cfg.AccountRecovery.MaxBackoffSeconds != 900 || cfg.AccountRecovery.ProbeTimeoutSeconds != 75 || cfg.AccountRecovery.MaxWorkers != 3 {
+		t.Fatalf("unexpected account recovery env config: %+v", cfg.AccountRecovery)
+	}
+}
+
 func TestLoadDefaultOpenAIWSConfig(t *testing.T) {
 	resetViperWithJWTSecret(t)
 

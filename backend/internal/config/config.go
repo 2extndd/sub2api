@@ -80,6 +80,7 @@ type Config struct {
 	RateLimit               RateLimitConfig               `mapstructure:"rate_limit"`
 	Pricing                 PricingConfig                 `mapstructure:"pricing"`
 	Gateway                 GatewayConfig                 `mapstructure:"gateway"`
+	AccountRecovery         AccountRecoveryConfig         `mapstructure:"account_recovery"`
 	APIKeyAuth              APIKeyAuthCacheConfig         `mapstructure:"api_key_auth_cache"`
 	SubscriptionCache       SubscriptionCacheConfig       `mapstructure:"subscription_cache"`
 	SubscriptionMaintenance SubscriptionMaintenanceConfig `mapstructure:"subscription_maintenance"`
@@ -687,6 +688,19 @@ const (
 	ImageConcurrencyOverflowModeReject = "reject"
 	ImageConcurrencyOverflowModeWait   = "wait"
 )
+
+// AccountRecoveryConfig controls paid recovery probes for OpenAI API-key accounts
+// that are already in error state. Active accounts, including accounts manually
+// marked unschedulable, are never probed by this worker.
+type AccountRecoveryConfig struct {
+	Enabled             bool   `mapstructure:"enabled"`
+	IntervalSeconds     int    `mapstructure:"interval_seconds"`
+	BaseBackoffSeconds  int    `mapstructure:"base_backoff_seconds"`
+	MaxBackoffSeconds   int    `mapstructure:"max_backoff_seconds"`
+	ProbeTimeoutSeconds int    `mapstructure:"probe_timeout_seconds"`
+	MaxWorkers          int    `mapstructure:"max_workers"`
+	ProbeModel          string `mapstructure:"probe_model"`
+}
 
 // GatewayConfig API网关相关配置
 type GatewayConfig struct {
@@ -1830,6 +1844,15 @@ func setDefaults() {
 	viper.SetDefault("idempotency.cleanup_interval_seconds", 60)
 	viper.SetDefault("idempotency.cleanup_batch_size", 500)
 
+	// Error-only account recovery. Disabled by default because probes consume upstream usage.
+	viper.SetDefault("account_recovery.enabled", false)
+	viper.SetDefault("account_recovery.interval_seconds", 60)
+	viper.SetDefault("account_recovery.base_backoff_seconds", 60)
+	viper.SetDefault("account_recovery.max_backoff_seconds", 1800)
+	viper.SetDefault("account_recovery.probe_timeout_seconds", 90)
+	viper.SetDefault("account_recovery.max_workers", 2)
+	viper.SetDefault("account_recovery.probe_model", "")
+
 	// Gateway
 	viper.SetDefault("gateway.response_header_timeout", 600) // 600秒(10分钟)等待上游响应头，LLM高负载时可能排队较久
 	viper.SetDefault("gateway.openai_response_header_timeout", 0)
@@ -2008,6 +2031,26 @@ func (c *Config) Validate() error {
 	// 选择 bytes 而不是 rune 计数，确保二进制/随机串的长度语义更接近“熵”而非“字符数”。
 	if len([]byte(jwtSecret)) < 32 {
 		return fmt.Errorf("jwt.secret must be at least 32 bytes")
+	}
+	if c.AccountRecovery.Enabled {
+		if strings.TrimSpace(c.AccountRecovery.ProbeModel) == "" {
+			return fmt.Errorf("account_recovery.probe_model is required when account recovery is enabled")
+		}
+		if c.AccountRecovery.IntervalSeconds <= 0 {
+			return fmt.Errorf("account_recovery.interval_seconds must be positive")
+		}
+		if c.AccountRecovery.BaseBackoffSeconds <= 0 {
+			return fmt.Errorf("account_recovery.base_backoff_seconds must be positive")
+		}
+		if c.AccountRecovery.MaxBackoffSeconds < c.AccountRecovery.BaseBackoffSeconds {
+			return fmt.Errorf("account_recovery.max_backoff_seconds must be greater than or equal to base_backoff_seconds")
+		}
+		if c.AccountRecovery.ProbeTimeoutSeconds <= 0 {
+			return fmt.Errorf("account_recovery.probe_timeout_seconds must be positive")
+		}
+		if c.AccountRecovery.MaxWorkers <= 0 {
+			return fmt.Errorf("account_recovery.max_workers must be positive")
+		}
 	}
 	switch c.Log.Level {
 	case "debug", "info", "warn", "error":
