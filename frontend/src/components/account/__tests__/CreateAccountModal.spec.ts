@@ -145,6 +145,15 @@ async function openCodexImportStep(toggleClicks = 0) {
   return wrapper
 }
 
+async function openOpenAIAPIKeyForm() {
+  const wrapper = mountModal()
+  await selectButtonByText(wrapper, 'OpenAI')
+  await selectButtonByText(wrapper, 'API Key')
+  await wrapper.get('form#create-account-form input[type="text"]').setValue('Image account')
+  await wrapper.get('form#create-account-form input[type="password"]').setValue('test-api-key')
+  return wrapper
+}
+
 describe('CreateAccountModal OpenAI long-context billing', () => {
   beforeEach(() => {
     createAccountMock.mockReset().mockResolvedValue({ id: 42, platform: 'openai', type: 'apikey' })
@@ -337,5 +346,67 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     await flushPromises()
 
     expect(createOpenAICodexPATMock.mock.calls[0]?.[0]?.extra?.openai_long_context_billing_enabled).toBe(false)
+  })
+})
+
+describe('CreateAccountModal OpenAI image-only capability', () => {
+  beforeEach(() => {
+    createAccountMock.mockReset().mockResolvedValue({ id: 42, platform: 'openai', type: 'apikey' })
+    probeUpstreamBillingMock.mockReset().mockResolvedValue({})
+  })
+
+  it('keeps legacy API-key creation text-only by default', async () => {
+    const wrapper = await openOpenAIAPIKeyForm()
+
+    expect(wrapper.get('[data-testid="image-generation-only-toggle"]').attributes('aria-checked')).toBe('false')
+    expect(
+      wrapper.get<HTMLInputElement>('[data-testid="openai-endpoint-capability-chat_completions"]').element.checked
+    ).toBe(true)
+    expect(
+      wrapper.get<HTMLInputElement>('[data-testid="openai-endpoint-capability-embeddings"]').element.checked
+    ).toBe(true)
+    expect(
+      wrapper.get<HTMLInputElement>('[data-testid="openai-endpoint-capability-images"]').element.checked
+    ).toBe(false)
+
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(createAccountMock).toHaveBeenCalledTimes(1)
+    expect(createAccountMock.mock.calls[0]?.[0]?.credentials).not.toHaveProperty('openai_capabilities')
+  })
+
+  it('creates an image-only API-key account from the dedicated switch', async () => {
+    const wrapper = await openOpenAIAPIKeyForm()
+
+    await wrapper.get('[data-testid="image-generation-only-toggle"]').trigger('click')
+
+    expect(wrapper.get('[data-testid="image-generation-only-toggle"]').attributes('aria-checked')).toBe('true')
+    expect(
+      wrapper.get<HTMLInputElement>('[data-testid="openai-endpoint-capability-chat_completions"]').element.checked
+    ).toBe(false)
+    expect(
+      wrapper.get<HTMLInputElement>('[data-testid="openai-endpoint-capability-images"]').element.checked
+    ).toBe(true)
+    expect(wrapper.get('[data-testid="openai-responses-mode-select"]').attributes('disabled')).toBe('true')
+
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(createAccountMock).toHaveBeenCalledTimes(1)
+    expect(createAccountMock.mock.calls[0]?.[0]?.credentials?.openai_capabilities).toEqual(['images'])
+  })
+
+  it('restores default capabilities when image-only mode is switched off', async () => {
+    const wrapper = await openOpenAIAPIKeyForm()
+
+    const toggle = wrapper.get('[data-testid="image-generation-only-toggle"]')
+    await toggle.trigger('click')
+    await toggle.trigger('click')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(createAccountMock).toHaveBeenCalledTimes(1)
+    expect(createAccountMock.mock.calls[0]?.[0]?.credentials).not.toHaveProperty('openai_capabilities')
   })
 })

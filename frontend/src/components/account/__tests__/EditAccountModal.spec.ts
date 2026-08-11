@@ -1178,4 +1178,208 @@ describe('EditAccountModal', () => {
       'antigravity_project_id'
     )
   })
+
+  describe('OpenAI image generation capability', () => {
+    it('loads account with missing openai_capabilities as default text+embeddings', async () => {
+      const account = buildAccount()
+      // Explicitly no openai_capabilities in credentials
+      account.credentials = {
+        api_key: 'sk-test',
+        base_url: 'https://api.openai.com'
+      }
+      updateAccountMock.mockReset()
+      checkMixedChannelRiskMock.mockReset()
+      checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+      updateAccountMock.mockResolvedValue(account)
+
+      const wrapper = mountModal(account)
+
+      // Should have chat_completions and embeddings checkboxes checked
+      const chatCheckbox = wrapper.find('[data-testid="openai-endpoint-capability-chat_completions"]')
+      const embeddingsCheckbox = wrapper.find('[data-testid="openai-endpoint-capability-embeddings"]')
+      const imagesCheckbox = wrapper.find('[data-testid="openai-endpoint-capability-images"]')
+
+      expect(chatCheckbox.exists()).toBe(true)
+      expect((chatCheckbox.element as HTMLInputElement).checked).toBe(true)
+      expect(embeddingsCheckbox.exists()).toBe(true)
+      expect((embeddingsCheckbox.element as HTMLInputElement).checked).toBe(true)
+      expect(imagesCheckbox.exists()).toBe(true)
+      expect((imagesCheckbox.element as HTMLInputElement).checked).toBe(false)
+    })
+
+    it('loads account with ["images"] as image-only mode', async () => {
+      const account = buildAccount()
+      account.credentials = {
+        api_key: 'sk-test',
+        base_url: 'https://api.openai.com',
+        openai_capabilities: ['images']
+      }
+      updateAccountMock.mockReset()
+      checkMixedChannelRiskMock.mockReset()
+      checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+      updateAccountMock.mockResolvedValue(account)
+
+      const wrapper = mountModal(account)
+
+      const imagesCheckbox = wrapper.find('[data-testid="openai-endpoint-capability-images"]')
+      const imageGenerationToggle = wrapper.find('[data-testid="image-generation-only-toggle"]')
+
+      expect((imagesCheckbox.element as HTMLInputElement).checked).toBe(true)
+      expect(imageGenerationToggle.classes()).toContain('bg-primary-600')
+    })
+
+    it('enables image-only mode when checkbox is toggled', async () => {
+      const account = buildAccount()
+      updateAccountMock.mockReset()
+      checkMixedChannelRiskMock.mockReset()
+      checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+      updateAccountMock.mockResolvedValue(account)
+
+      const wrapper = mountModal(account)
+
+      const imageGenerationToggle = wrapper.find('[data-testid="image-generation-only-toggle"]')
+      await imageGenerationToggle.trigger('click')
+
+      const chatCheckbox = wrapper.find('[data-testid="openai-endpoint-capability-chat_completions"]')
+      const imagesCheckbox = wrapper.find('[data-testid="openai-endpoint-capability-images"]')
+
+      expect((chatCheckbox.element as HTMLInputElement).checked).toBe(false)
+      expect((imagesCheckbox.element as HTMLInputElement).checked).toBe(true)
+    })
+
+    it('disables image-only mode and restores default when toggled off', async () => {
+      const account = buildAccount()
+      account.credentials = {
+        api_key: 'sk-test',
+        base_url: 'https://api.openai.com',
+        openai_capabilities: ['images']
+      }
+      updateAccountMock.mockReset()
+      checkMixedChannelRiskMock.mockReset()
+      checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+      updateAccountMock.mockResolvedValue(account)
+
+      const wrapper = mountModal(account)
+
+      const imageGenerationToggle = wrapper.find('[data-testid="image-generation-only-toggle"]')
+      await imageGenerationToggle.trigger('click')
+
+      const chatCheckbox = wrapper.find('[data-testid="openai-endpoint-capability-chat_completions"]')
+      const embeddingsCheckbox = wrapper.find('[data-testid="openai-endpoint-capability-embeddings"]')
+      const imagesCheckbox = wrapper.find('[data-testid="openai-endpoint-capability-images"]')
+
+      expect((chatCheckbox.element as HTMLInputElement).checked).toBe(true)
+      expect((embeddingsCheckbox.element as HTMLInputElement).checked).toBe(true)
+      expect((imagesCheckbox.element as HTMLInputElement).checked).toBe(false)
+    })
+
+    it('persists image-only capability explicitly when saving', async () => {
+      const account = buildAccount()
+      updateAccountMock.mockReset()
+      checkMixedChannelRiskMock.mockReset()
+      checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+      updateAccountMock.mockResolvedValue(account)
+
+      const wrapper = mountModal(account)
+
+      // Enable image-only mode
+      await wrapper.find('[data-testid="image-generation-only-toggle"]').trigger('click')
+      await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+      expect(updateAccountMock).toHaveBeenCalledTimes(1)
+      expect(updateAccountMock.mock.calls[0]?.[1]?.credentials?.openai_capabilities).toEqual(['images'])
+    })
+
+    it('persists mixed capabilities (e.g., embeddings + images) explicitly', async () => {
+      const account = buildAccount()
+      updateAccountMock.mockReset()
+      checkMixedChannelRiskMock.mockReset()
+      checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+      updateAccountMock.mockResolvedValue(account)
+
+      const wrapper = mountModal(account)
+
+      // Uncheck chat_completions, enable images
+      await wrapper
+        .find<HTMLInputElement>('[data-testid="openai-endpoint-capability-chat_completions"]')
+        .setValue(false)
+      await wrapper
+        .find<HTMLInputElement>('[data-testid="openai-endpoint-capability-images"]')
+        .setValue(true)
+      await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+      expect(updateAccountMock).toHaveBeenCalledTimes(1)
+      const capabilities = updateAccountMock.mock.calls[0]?.[1]?.credentials?.openai_capabilities
+      expect(capabilities).toContain('embeddings')
+      expect(capabilities).toContain('images')
+      expect(capabilities).not.toContain('chat_completions')
+    })
+
+    it('deletes openai_capabilities when saving default text+embeddings', async () => {
+      const account = buildAccount()
+      // Start with mixed capabilities
+      account.credentials = {
+        api_key: 'sk-test',
+        base_url: 'https://api.openai.com',
+        openai_capabilities: ['chat_completions', 'embeddings', 'images']
+      }
+      updateAccountMock.mockReset()
+      checkMixedChannelRiskMock.mockReset()
+      checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+      updateAccountMock.mockResolvedValue(account)
+
+      const wrapper = mountModal(account)
+
+      // Uncheck images to return to default
+      await wrapper
+        .find<HTMLInputElement>('[data-testid="openai-endpoint-capability-images"]')
+        .setValue(false)
+      await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+      expect(updateAccountMock).toHaveBeenCalledTimes(1)
+      expect(updateAccountMock.mock.calls[0]?.[1]?.credentials).not.toHaveProperty('openai_capabilities')
+    })
+
+    it('disables responses mode controls when image-only', async () => {
+      const account = buildAccount()
+      account.credentials = {
+        api_key: 'sk-test',
+        base_url: 'https://api.openai.com',
+        openai_capabilities: ['images']
+      }
+      updateAccountMock.mockReset()
+      checkMixedChannelRiskMock.mockReset()
+      checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+      updateAccountMock.mockResolvedValue(account)
+
+      const wrapper = mountModal(account)
+
+      const responsesDisabledHint = wrapper.find('[data-testid="openai-responses-mode-not-applicable"]')
+      expect(responsesDisabledHint.exists()).toBe(true)
+    })
+
+    it('resets responses mode to auto when disabling text generation', async () => {
+      const account = buildAccount()
+      account.extra = {
+        openai_responses_mode: 'force_responses'
+      }
+      updateAccountMock.mockReset()
+      checkMixedChannelRiskMock.mockReset()
+      checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+      updateAccountMock.mockResolvedValue(account)
+
+      const wrapper = mountModal(account)
+
+      // Uncheck chat_completions to disable text generation
+      await wrapper
+        .find<HTMLInputElement>('[data-testid="openai-endpoint-capability-chat_completions"]')
+        .setValue(false)
+
+      // Verify responses mode is reset to auto and submit
+      await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+      expect(updateAccountMock).toHaveBeenCalledTimes(1)
+      expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.openai_responses_mode).toBeUndefined()
+    })
+  })
 })

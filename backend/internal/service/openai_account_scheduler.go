@@ -495,7 +495,10 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 		return nil, false, nil
 	}
 	account = s.service.recheckSelectedOpenAIAccountFromDB(ctx, account, req.GroupID, req.Platform, req.RequestedModel, req.RequireCompact, req.RequiredCapability)
-	if account == nil || !s.service.openAIAccountMatchesSchedulingGroup(account, req.GroupID) || !s.isAccountTransportCompatible(account, req.RequiredTransport) {
+	if account == nil ||
+		!s.service.openAIAccountMatchesSchedulingGroup(account, req.GroupID) ||
+		!s.isAccountTransportCompatible(account, req.RequiredTransport) ||
+		!s.isAccountRequestCompatible(ctx, account, req) {
 		_ = s.service.deleteStickySessionAccountID(ctx, req.GroupID, sessionHash)
 		return nil, false, nil
 	}
@@ -2210,8 +2213,17 @@ func accountSupportsOpenAICapabilities(account *Account, requiredCapability Open
 	if account == nil {
 		return false
 	}
-	return account.SupportsOpenAIEndpointCapability(requiredCapability) &&
-		account.SupportsOpenAIImageCapability(requiredImageCapability)
+	if !account.SupportsOpenAIEndpointCapability(requiredCapability) {
+		return false
+	}
+	// The Responses capability is currently requested only for explicit
+	// image-generation intent. Require the separate image opt-in as well so a
+	// Responses-capable text account cannot receive hosted image-tool traffic.
+	if requiredCapability == OpenAIEndpointCapabilityResponses &&
+		!account.SupportsOpenAIImageCapability(OpenAIImagesCapabilityBasic) {
+		return false
+	}
+	return account.SupportsOpenAIImageCapability(requiredImageCapability)
 }
 
 func cloneExcludedAccountIDs(excludedIDs map[int64]struct{}) map[int64]struct{} {

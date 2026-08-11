@@ -101,6 +101,11 @@ const (
 	// credentials["openai_capabilities"] 配置集。仅用于生图意图的 /v1/responses
 	// 调度，避免把请求调度到会在 forward 阶段被降级为 Chat Completions 的账号（#4417）。
 	OpenAIEndpointCapabilityResponses OpenAIEndpointCapability = "responses"
+	// OpenAIEndpointCapabilityImages 表示 APIKey 账号可以使用 /v1/images/* 端点。
+	// 未配置此能力的 APIKey 账号将被拒绝直接图像生成请求。OAuth 账号保留向后兼容性
+	// 并总是允许图像生成。同时用于 /v1/responses 生图意图的调度：需要同时具备
+	// Responses 和 Images 能力（目前仅 Responses 用于显式生图意图）。
+	OpenAIEndpointCapabilityImages OpenAIEndpointCapability = "images"
 )
 
 const openAIEndpointCapabilitiesCredentialKey = "openai_capabilities"
@@ -1483,11 +1488,26 @@ func (a *Account) SupportsOpenAIEndpointCapability(capability OpenAIEndpointCapa
 		if a.Type != AccountTypeAPIKey {
 			return false
 		}
+	case OpenAIEndpointCapabilityImages:
+		// /v1/images/* 仅限 APIKey 账号。OAuth 账号保留向后兼容性（总是允许）。
+		if a.Type != AccountTypeAPIKey && a.Type != AccountTypeOAuth {
+			return false
+		}
+		// OAuth 账号无条件支持历史镜像行为（无需显式能力标记）
+		if a.Type == AccountTypeOAuth {
+			return true
+		}
+		// APIKey 账号需要显式 "images" 能力标记
 	default:
 		return false
 	}
 
 	configured, found := a.openAIEndpointCapabilitySet()
+	// Special handling for images: APIKey accounts without explicit capability
+	// configuration must be rejected. OAuth maintains backward compatibility.
+	if capability == OpenAIEndpointCapabilityImages && a.Type == AccountTypeAPIKey && !found {
+		return false
+	}
 	if !found {
 		return true
 	}
@@ -1599,7 +1619,10 @@ func (a *Account) SupportsOpenAIImageCapability(capability OpenAIImagesCapabilit
 	}
 	switch capability {
 	case OpenAIImagesCapabilityBasic, OpenAIImagesCapabilityNative:
-		return a.Type == AccountTypeOAuth || a.Type == AccountTypeAPIKey
+		// OAuth keeps the historical implicit image support. API-key accounts
+		// must opt in through credentials["openai_capabilities"] so enabling a
+		// group's image flag cannot route traffic to unverified text accounts.
+		return a.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityImages)
 	default:
 		return true
 	}

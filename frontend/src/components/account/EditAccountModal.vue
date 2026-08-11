@@ -1663,6 +1663,30 @@
           {{ t('admin.accounts.openai.responsesModeTextDisabledHint') }}
         </div>
         <div>
+          <div class="input-label mb-2 flex items-center justify-between">
+            <span>{{ t('admin.accounts.openai.imageGenerationOnly') }}</span>
+            <button
+              type="button"
+              role="switch"
+              :aria-checked="imageGenerationOnlyMode"
+              @click="imageGenerationOnlyMode = !imageGenerationOnlyMode"
+              :class="[
+                'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+                imageGenerationOnlyMode ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+              ]"
+              data-testid="image-generation-only-toggle"
+            >
+              <span
+                :class="[
+                  'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                  imageGenerationOnlyMode ? 'translate-x-5' : 'translate-x-0'
+                ]"
+              />
+            </button>
+          </div>
+          <p class="input-hint">{{ t('admin.accounts.openai.imageGenerationOnlyDesc') }}</p>
+        </div>
+        <div>
           <label class="input-label mb-2 block">{{ t('admin.accounts.openai.endpointCapabilities') }}</label>
           <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <label
@@ -1675,6 +1699,7 @@
                 class="rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-500"
                 :data-testid="`openai-endpoint-capability-${option.value}`"
                 :checked="openAIEndpointCapabilities.includes(option.value)"
+                :disabled="imageGenerationOnlyMode"
                 @change="toggleOpenAIEndpointCapability(option.value, $event)"
               />
               <span class="text-gray-700 dark:text-gray-200">{{ option.label }}</span>
@@ -3068,16 +3093,32 @@ const openAITextEndpointCapabilityLabel = computed(() => {
 })
 const openAIEndpointCapabilityOptions = computed<{ value: OpenAIEndpointCapability; label: string }[]>(() => [
   { value: 'chat_completions', label: openAITextEndpointCapabilityLabel.value },
-  { value: 'embeddings', label: t('admin.accounts.openai.capabilityEmbeddings') }
+  { value: 'embeddings', label: t('admin.accounts.openai.capabilityEmbeddings') },
+  { value: 'images', label: t('admin.accounts.openai.capabilityImages') }
 ])
 const openAITextGenerationCapabilityEnabled = computed(() =>
   openAIEndpointCapabilities.value.includes('chat_completions')
 )
+const imageGenerationOnlyMode = computed({
+  get: () =>
+    openAIEndpointCapabilities.value.length === 1 &&
+    openAIEndpointCapabilities.value.includes('images'),
+  set: (enabled: boolean) => {
+    openAIEndpointCapabilities.value = enabled
+      ? ['images']
+      : ['chat_completions', 'embeddings']
+    if (enabled) {
+      openAIResponsesMode.value = 'auto'
+    }
+  }
+})
 
-const normalizeOpenAIEndpointCapabilities = (values: OpenAIEndpointCapability[]) => {
-  const allowed: OpenAIEndpointCapability[] = ['chat_completions', 'embeddings']
+const normalizeOpenAIEndpointCapabilities = (
+  values: OpenAIEndpointCapability[]
+): OpenAIEndpointCapability[] => {
+  const allowed: OpenAIEndpointCapability[] = ['chat_completions', 'embeddings', 'images']
   const selected = allowed.filter((value) => values.includes(value))
-  return selected.length > 0 ? selected : allowed
+  return selected.length > 0 ? selected : ['chat_completions', 'embeddings']
 }
 
 const readOpenAIEndpointCapabilities = (credentials?: Record<string, unknown>): OpenAIEndpointCapability[] => {
@@ -3085,7 +3126,7 @@ const readOpenAIEndpointCapabilities = (credentials?: Record<string, unknown>): 
   if (Array.isArray(raw)) {
     return normalizeOpenAIEndpointCapabilities(
       raw.filter((value): value is OpenAIEndpointCapability =>
-        value === 'chat_completions' || value === 'embeddings'
+        value === 'chat_completions' || value === 'embeddings' || value === 'images'
       )
     )
   }
@@ -3123,12 +3164,15 @@ const toggleOpenAIEndpointCapability = (capability: OpenAIEndpointCapability, ev
 
 const applyOpenAIEndpointCapabilities = (credentials: Record<string, unknown>) => {
   const capabilities = normalizeOpenAIEndpointCapabilities(openAIEndpointCapabilities.value)
-  if (capabilities.length === 2) {
+  // Default text+embeddings: delete to preserve legacy semantics
+  if (capabilities.length === 2 && capabilities.includes('chat_completions') && capabilities.includes('embeddings')) {
     delete credentials.openai_capabilities
     return
   }
+  // Explicit: persist images or mixed combinations
   credentials.openai_capabilities = capabilities
 }
+
 const normalizeOpenAIResponsesMode = (mode: unknown): OpenAIResponsesMode => {
   if (mode === 'force_responses' || mode === 'force_chat_completions') {
     return mode

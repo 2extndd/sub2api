@@ -622,12 +622,18 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_ResponsesCapabilityExcl
 	supported := Account{
 		ID: 37001, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
 		Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 0,
+		Credentials: map[string]any{
+			openAIEndpointCapabilitiesCredentialKey: []any{"chat_completions", "images"},
+		},
 	}
 	// 更高优先级但探测确认不支持 Responses——若门控失效会被优先选中。
 	unsupported := Account{
 		ID: 37002, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
 		Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 5,
 		Extra: map[string]any{"openai_responses_supported": false},
+		Credentials: map[string]any{
+			openAIEndpointCapabilitiesCredentialKey: []any{"chat_completions", "images"},
+		},
 	}
 
 	t.Run("生图意图仅选中支持 responses 的账号", func(t *testing.T) {
