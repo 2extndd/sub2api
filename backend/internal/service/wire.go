@@ -666,6 +666,19 @@ func ProvideBillingCacheService(
 	return NewBillingCacheService(cache, userRepo, subRepo, apiKeyRepo, rpmCache, rateRepo, cfg, userPlatformQuotaRepo)
 }
 
+// ProvideAdaptiveLatencyRuntime composes latency health and durable telemetry in an
+// observation-only runtime. No scheduler or gateway constructor consumes it.
+func ProvideAdaptiveLatencyRuntime(
+	cfg *config.Config,
+	cache OpenAILatencyTelemetryCache,
+	rollups OpenAILatencyTelemetryRollupRepository,
+	leaderLock LeaderLockCache,
+	db *sql.DB,
+	transitionGuard LatencyHealthTransitionGuard,
+) (*AdaptiveLatencyRuntime, error) {
+	return NewAdaptiveLatencyRuntime(cfg, cache, rollups, leaderLock, db, transitionGuard)
+}
+
 // ProvideAPIKeyService wires APIKeyService and connects rate-limit cache invalidation.
 func ProvideAPIKeyService(
 	apiKeyRepo APIKeyRepository,
@@ -742,6 +755,8 @@ var ProviderSet = wire.NewSet(
 	ProvideOllamaCloudUsageService,
 	ProvideSettingService,
 	NewDataManagementService,
+	// Feature-off adaptive runtime. It is lifecycle-only and cannot route traffic.
+	ProvideAdaptiveLatencyRuntime,
 	ProvideBackupService,
 	ProvideOpsSystemLogSink,
 	ProvideOpsService,

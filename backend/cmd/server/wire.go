@@ -115,7 +115,13 @@ func provideCleanup(
 	ollamaCloudUsage *service.OllamaCloudUsageService,
 	auditLog *service.AuditLogService,
 	promptAudit *securityaudit.PromptService,
+	adaptiveLatencyRuntime *service.AdaptiveLatencyRuntime,
 ) func() {
+	// This provider is the final successful composition step. Start background
+	// telemetry only now so an earlier Wire constructor error cannot leak it.
+	if adaptiveLatencyRuntime != nil {
+		adaptiveLatencyRuntime.Start()
+	}
 	return func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -127,6 +133,12 @@ func provideCleanup(
 
 		// 应用层清理步骤可并行执行，基础设施资源（Redis/Ent）最后按顺序关闭。
 		parallelSteps := []cleanupStep{
+			{"AdaptiveLatencyRuntime", func() error {
+				if adaptiveLatencyRuntime != nil {
+					adaptiveLatencyRuntime.Stop()
+				}
+				return nil
+			}},
 			{"OpsIngressRejectAggregator", func() error {
 				if opsIngressReject != nil {
 					opsIngressReject.Stop()

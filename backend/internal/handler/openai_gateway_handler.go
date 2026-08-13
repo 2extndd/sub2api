@@ -41,6 +41,7 @@ type OpenAIGatewayHandler struct {
 	opsService                 *service.OpsService
 	concurrencyHelper          *ConcurrencyHelper
 	imageLimiter               *imageConcurrencyLimiter
+	adaptiveLatencyRuntime     *service.AdaptiveLatencyRuntime
 	maxAccountSwitches         int
 	cfg                        *config.Config
 }
@@ -233,6 +234,60 @@ func NewOpenAIGatewayHandler(
 
 // Responses handles OpenAI Responses API endpoint
 // POST /openai/v1/responses
+func (h *OpenAIGatewayHandler) observeAdaptiveLatencyAttempt(
+	cohort service.CohortKey,
+	accountID int64,
+	candidateCount int,
+	startedAt time.Time,
+	result *service.OpenAIForwardResult,
+	attemptErr error,
+	streamStarted bool,
+) {
+	if h == nil || h.adaptiveLatencyRuntime == nil || !h.adaptiveLatencyRuntime.Enabled() {
+		return
+	}
+	statusCode := 0
+	var failoverErr *service.UpstreamFailoverError
+	if errors.As(attemptErr, &failoverErr) {
+		statusCode = failoverErr.StatusCode
+	}
+	latency := time.Since(startedAt)
+	phases := map[service.OpenAILatencyPhase]time.Duration{
+		service.OpenAILatencyPhaseTotal: latency,
+	}
+	if result != nil && result.FirstTokenMs != nil && *result.FirstTokenMs >= 0 {
+		firstMeaningful := time.Duration(*result.FirstTokenMs) * time.Millisecond
+		phases[service.OpenAILatencyPhaseFirstMeaningful] = firstMeaningful
+		phases[service.OpenAILatencyPhaseFirstSSE] = firstMeaningful
+	}
+	if candidateCount < 0 {
+		candidateCount = 0
+	}
+	winner := service.OpenAIWinnerOutcomePrimary
+	if attemptErr != nil {
+		winner = service.OpenAIWinnerOutcomeNoWinner
+	}
+	h.adaptiveLatencyRuntime.Observe(
+		service.AdaptiveLatencyObserveRequest{
+			Cohort:      cohort,
+			AccountID:   accountID,
+			AttemptRole: service.OpenAIAttemptRolePrimary,
+			Pool: service.PoolSnapshot{
+				QuarantinedAccounts: 0,
+				HardValidAccounts:   candidateCount,
+			},
+		},
+		service.AdaptiveLatencyObserveOutcome{
+			HTTPStatus:          statusCode,
+			LatencyMilliseconds: latency.Milliseconds(),
+			Failure:             service.ClassifyAdaptiveLatencyFailure(attemptErr, statusCode, streamStarted),
+			Phases:              phases,
+			Winner:              winner,
+			Capacity:            service.OpenAICapacityOutcomeAvailable,
+		},
+	)
+}
+
 func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	// 局部兜底：确保该 handler 内部任何 panic 都不会击穿到进程级。
 	streamStarted := false
@@ -325,6 +380,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
+	adaptiveCohort := service.CanonicalOpenAIResponsesCohort(body, reqModel)
 	previousResponseID := strings.TrimSpace(gjson.GetBytes(body, "previous_response_id").String())
 	if previousResponseID != "" {
 		previousResponseIDKind := service.ClassifyOpenAIPreviousResponseIDKind(previousResponseID)
@@ -549,14 +605,49 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		// 从不可变的 canonical forwardBody 派生本次尝试 body 并整块剔除上游私有的加密
 		// reasoning item（含耦合的 id/summary），避免非透传上游 400 拒绝 Kiro reasoning 形态。
 		attemptBody := h.deriveOpenAIForwardAttemptBody(reqLog, forwardBody, account, &passthroughFailoverState)
-		result, err := func() (*service.OpenAIForwardResult, error) {
-			defer func() {
-				if accountReleaseFunc != nil {
-					accountReleaseFunc()
-				}
+		attemptStartedAt := time.Now()
+		hedgeResult, hedged := h.tryForwardResponsesWithHedge(
+			c.Request.Context(),
+			c,
+			apiKey,
+			reqModel,
+			requestPlatform,
+			attemptBody,
+			account,
+			accountReleaseFunc,
+			adaptiveCohort,
+			reqStream,
+			imageIntent,
+			requireCompact,
+		)
+		var result *service.OpenAIForwardResult
+		if hedged {
+			result, err = hedgeResult.result, hedgeResult.err
+			if hedgeResult.account != nil {
+				account = hedgeResult.account
+			}
+			if hedgeResult.context != nil {
+				service.CopyOpenAIHedgeAttemptContext(c, hedgeResult.context)
+			}
+		} else {
+			result, err = func() (*service.OpenAIForwardResult, error) {
+				defer func() {
+					if accountReleaseFunc != nil {
+						accountReleaseFunc()
+					}
+				}()
+				return h.gatewayService.Forward(c.Request.Context(), c, account, attemptBody)
 			}()
-			return h.gatewayService.Forward(c.Request.Context(), c, account, attemptBody)
-		}()
+		}
+		h.observeAdaptiveLatencyAttempt(
+			adaptiveCohort,
+			account.ID,
+			scheduleDecision.CandidateCount,
+			attemptStartedAt,
+			result,
+			err,
+			streamStarted,
+		)
 		cyberBlockKeyHTTP := ""
 		if service.GetOpsCyberPolicy(c) != nil {
 			cyberBlockKeyHTTP = service.CyberSessionBlockKey(apiKey.ID, c, sessionHashBody)
