@@ -57,14 +57,27 @@ func (h *OpenAIGatewayHandler) tryForwardResponsesWithHedge(
 	if !h.openAIResponsesHedgeEligible(c, body, model, primary, reqStream, imageIntent, requireCompact) {
 		return openAIResponsesHedgeResult{}, false
 	}
-	headingConfig, enabled := h.adaptiveLatencyRuntime.HedgeConfig()
+	hedgeConfig, enabled := h.adaptiveLatencyRuntime.HedgeConfig()
 	if !enabled {
+		return openAIResponsesHedgeResult{}, false
+	}
+	if apiKey == nil {
+		h.adaptiveLatencyRuntime.RecordHedgeCanaryDecision(primary.ID, cohort, false)
+		return openAIResponsesHedgeResult{}, false
+	}
+	canarySelected := service.OpenAIHedgeCanarySelected(
+		apiKey.ID,
+		cohort,
+		hedgeConfig.CanaryBasisPoints,
+	)
+	h.adaptiveLatencyRuntime.RecordHedgeCanaryDecision(primary.ID, cohort, canarySelected)
+	if !canarySelected {
 		return openAIResponsesHedgeResult{}, false
 	}
 	policy, err := service.NewOpenAIHedgeGatewayPolicy(
 		h.gatewayService,
 		h.adaptiveLatencyRuntime,
-		headingConfig,
+		hedgeConfig,
 		apiKey.GroupID,
 		model,
 		platform,
@@ -72,7 +85,7 @@ func (h *OpenAIGatewayHandler) tryForwardResponsesWithHedge(
 		primary,
 	)
 	if err != nil || policy.PrimaryHedgeAccount().PotentialCostMicros == 0 ||
-		policy.PrimaryHedgeAccount().PotentialCostMicros > headingConfig.MaxDuplicateCostMicros {
+		policy.PrimaryHedgeAccount().PotentialCostMicros > hedgeConfig.MaxDuplicateCostMicros {
 		return openAIResponsesHedgeResult{}, false
 	}
 	if err := policy.TransferPrimaryLease(primaryRelease); err != nil {

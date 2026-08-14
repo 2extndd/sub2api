@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -158,6 +159,7 @@ func TestAdaptiveLatencyRuntimeSourceIdentityIsStableAndGenerationChanges(t *tes
 func TestAdaptiveLatencyRuntimeHedgeEnablementBuildsRequestScopedFactory(t *testing.T) {
 	cfg := adaptiveLatencyRuntimeTestConfig(t)
 	cfg.Gateway.Scheduling.OpenAIHedge.Enabled = true
+	cfg.Gateway.Scheduling.OpenAIHedge.CanaryBasisPoints = config.MaximumOpenAIHedgeCanaryBasisPoints
 	runtime, err := NewAdaptiveLatencyRuntime(cfg, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	require.NotNil(t, runtime)
@@ -168,6 +170,97 @@ func TestAdaptiveLatencyRuntimeHedgeEnablementBuildsRequestScopedFactory(t *test
 	require.True(t, stats.Active)
 	_, enabled := runtime.HedgeConfig()
 	require.True(t, enabled)
+}
+
+func TestAdaptiveLatencyRuntimeZeroBasisPointsIsDecisionShadow(t *testing.T) {
+	cfg := adaptiveLatencyRuntimeTestConfig(t)
+	cfg.Gateway.Scheduling.OpenAIHedge.Enabled = true
+	runtime, err := NewAdaptiveLatencyRuntime(cfg, nil, nil, nil, nil, nil)
+	require.NoError(t, err)
+
+	stats := runtime.Stats().Hedge
+	require.True(t, stats.Configured)
+	require.True(t, stats.DecisionShadow)
+	require.False(t, stats.Active)
+	require.Zero(t, stats.CanaryBasisPoints)
+}
+
+func TestAdaptiveLatencyRuntimeCanaryDecisionStatsAreAggregate(t *testing.T) {
+	cfg := adaptiveLatencyRuntimeTestConfig(t)
+	cfg.Gateway.Scheduling.OpenAIHedge.Enabled = true
+	cfg.Gateway.Scheduling.OpenAIHedge.CanaryBasisPoints = 250
+	runtime, err := NewAdaptiveLatencyRuntime(cfg, nil, nil, nil, nil, nil)
+	require.NoError(t, err)
+
+	runtime.RecordHedgeCanaryDecision(17, UnknownCohortKey, false)
+	runtime.RecordHedgeCanaryDecision(17, UnknownCohortKey, true)
+	runtime.RecordHedgeCanaryDecision(17, UnknownCohortKey, false)
+
+	stats := runtime.Stats().Hedge
+	require.Equal(t, 250, stats.CanaryBasisPoints)
+	require.Equal(t, uint64(1), stats.CanarySelected)
+	require.Equal(t, uint64(2), stats.CanaryRejected)
+}
+
+func TestAdaptiveLatencyRuntimeCanaryDecisionStatsAreRaceSafe(t *testing.T) {
+	cfg := adaptiveLatencyRuntimeTestConfig(t)
+	cfg.Gateway.Scheduling.OpenAIHedge.Enabled = true
+	runtime, err := NewAdaptiveLatencyRuntime(cfg, nil, nil, nil, nil, nil)
+	require.NoError(t, err)
+
+	const decisions = 500
+	var workers sync.WaitGroup
+	workers.Add(decisions * 2)
+	for range decisions {
+		go func() {
+			defer workers.Done()
+			runtime.RecordHedgeCanaryDecision(17, UnknownCohortKey, true)
+		}()
+		go func() {
+			defer workers.Done()
+			runtime.RecordHedgeCanaryDecision(17, UnknownCohortKey, false)
+		}()
+	}
+	workers.Wait()
+
+	stats := runtime.Stats().Hedge
+	require.Equal(t, uint64(decisions), stats.CanarySelected)
+	require.Equal(t, uint64(decisions), stats.CanaryRejected)
+}
+
+func TestAdaptiveLatencyRuntimeCanaryDecisionsPersistBoundedTelemetry(t *testing.T) {
+	clock := &openAILatencyTelemetryCollectorFakeClock{now: time.Date(2026, 8, 14, 16, 0, 0, 0, time.UTC)}
+	collector := newOpenAILatencyTelemetryCollectorForTest(
+		t,
+		enabledOpenAILatencyTelemetryCollectorConfig(8),
+		clock,
+		nil,
+		nil,
+		nil,
+		91,
+	)
+	runtime := &AdaptiveLatencyRuntime{telemetry: collector}
+	cohort := NewCohortKey(
+		OpenAIEndpointResponses,
+		OpenAIModelText,
+		true,
+		OpenAIInputSizeSmall,
+		OpenAIReasoningLow,
+		OpenAIToolUseNone,
+	)
+
+	runtime.RecordHedgeCanaryDecision(17, cohort, true)
+	runtime.RecordHedgeCanaryDecision(17, cohort, false)
+
+	key := OpenAILatencyTelemetryKey{AccountID: 17, Cohort: cohort, AttemptRole: OpenAIAttemptRolePrimary}
+	collector.mu.Lock()
+	track := collector.registry[key]
+	collector.mu.Unlock()
+	require.NotNil(t, track)
+	snapshot := track.current.Snapshot()
+	require.Equal(t, OpenAILatencyTelemetrySchemaVersion, snapshot.SchemaVersion)
+	require.Equal(t, uint64(1), snapshot.Hedges[OpenAIHedgeOutcomeCanarySelected])
+	require.Equal(t, uint64(1), snapshot.Hedges[OpenAIHedgeOutcomeCanaryRejected])
 }
 
 func TestAdaptiveLatencyRuntimeShadowWiresHealthAndTelemetryWithoutRoutingMutation(t *testing.T) {

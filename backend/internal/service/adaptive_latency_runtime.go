@@ -13,9 +13,9 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 )
 
-// AdaptiveLatencyRuntime is the feature-off composition boundary for latency health,
-// durable shadow telemetry, and hedge policy. It is intentionally not injected
-// into the scheduler or gateway in S04, so constructing it cannot alter active
+// AdaptiveLatencyRuntime is the disabled-by-default composition boundary for
+// latency health, durable shadow telemetry, and hedge policy. It is injected
+// into the gateway, but disabled or zero-basis configuration cannot alter active
 // account selection, sticky sessions, streams, or billing.
 type AdaptiveLatencyRuntime struct {
 	health               *OpenAILatencyHealthService
@@ -26,6 +26,8 @@ type AdaptiveLatencyRuntime struct {
 	observationsRecorded atomic.Uint64
 	healthFailures       atomic.Uint64
 	telemetryFailures    atomic.Uint64
+	canarySelected       atomic.Uint64
+	canaryRejected       atomic.Uint64
 	lastHealthError      atomic.Value // stores string (type name)
 	lastTelemetryError   atomic.Value // stores string (type name)
 }
@@ -50,10 +52,14 @@ type AdaptiveLatencyObserverStats struct {
 }
 
 type AdaptiveHedgeRuntimeStats struct {
-	Configured    bool
-	Constructed   bool
-	AdaptersWired bool
-	Active        bool
+	Configured        bool
+	Constructed       bool
+	AdaptersWired     bool
+	Active            bool
+	DecisionShadow    bool
+	CanaryBasisPoints int
+	CanarySelected    uint64
+	CanaryRejected    uint64
 }
 
 // NewAdaptiveLatencyRuntime wires real shadow persistence dependencies but fails closed if
@@ -193,10 +199,14 @@ func (runtime *AdaptiveLatencyRuntime) Stats() AdaptiveLatencyRuntimeStats {
 		stats.Recommendation = runtime.telemetry.RecommendationSnapshot()
 	}
 	stats.Hedge = AdaptiveHedgeRuntimeStats{
-		Configured:    runtime.hedgeConfigured,
-		Constructed:   runtime.hedge != nil || runtime.hedgeConfigured,
-		AdaptersWired: true,
-		Active:        runtime.hedgeConfigured,
+		Configured:        runtime.hedgeConfigured,
+		Constructed:       runtime.hedge != nil || runtime.hedgeConfigured,
+		AdaptersWired:     true,
+		Active:            runtime.hedgeConfigured && runtime.hedgeConfig.CanaryBasisPoints > 0,
+		DecisionShadow:    runtime.hedgeConfigured && runtime.hedgeConfig.CanaryBasisPoints == 0,
+		CanaryBasisPoints: runtime.hedgeConfig.CanaryBasisPoints,
+		CanarySelected:    runtime.canarySelected.Load(),
+		CanaryRejected:    runtime.canaryRejected.Load(),
 	}
 	stats.Observer = AdaptiveLatencyObserverStats{
 		Enabled:              runtime.health != nil && runtime.telemetry != nil && runtime.telemetry.Enabled(),
@@ -234,6 +244,38 @@ func (runtime *AdaptiveLatencyRuntime) Hedge() *HedgeCoordinator {
 		return nil
 	}
 	return runtime.hedge
+}
+
+// RecordHedgeCanaryDecision records only an aggregate decision. Request and
+// API-key identity must not cross this observability boundary; durable telemetry
+// is keyed only by the already-allowlisted primary account and bounded cohort.
+func (runtime *AdaptiveLatencyRuntime) RecordHedgeCanaryDecision(
+	primaryAccountID int64,
+	cohort CohortKey,
+	selected bool,
+) {
+	if runtime == nil {
+		return
+	}
+	outcome := OpenAIHedgeOutcomeCanaryRejected
+	if selected {
+		runtime.canarySelected.Add(1)
+		outcome = OpenAIHedgeOutcomeCanarySelected
+	} else {
+		runtime.canaryRejected.Add(1)
+	}
+	if runtime.telemetry == nil || !runtime.telemetry.Enabled() || primaryAccountID <= 0 {
+		return
+	}
+	key := OpenAILatencyTelemetryKey{
+		AccountID:   primaryAccountID,
+		Cohort:      cohort,
+		AttemptRole: OpenAIAttemptRolePrimary,
+	}
+	if err := runtime.telemetry.ObserveHedge(key, outcome); err != nil {
+		runtime.telemetryFailures.Add(1)
+		runtime.lastTelemetryError.Store(fmt.Sprintf("%T", err))
+	}
 }
 
 func (runtime *AdaptiveLatencyRuntime) HedgeConfig() (config.OpenAIHedgeConfig, bool) {

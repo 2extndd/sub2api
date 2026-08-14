@@ -171,12 +171,26 @@ func newOpenAIResponsesHedgeHandlerFixture(
 	enabled bool,
 	upstream service.HTTPUpstream,
 ) (*OpenAIGatewayHandler, *openAIResponsesHedgeCountingConcurrencyCache, *openAIResponsesHedgeUsageLogRepo) {
-	return newOpenAIResponsesHedgeHandlerFixtureWithPool(t, enabled, true, upstream)
+	return newOpenAIResponsesHedgeHandlerFixtureWithCanary(
+		t, enabled, config.MaximumOpenAIHedgeCanaryBasisPoints, true, upstream,
+	)
 }
 
 func newOpenAIResponsesHedgeHandlerFixtureWithPool(
 	t *testing.T,
 	enabled bool,
+	includeSecondary bool,
+	upstream service.HTTPUpstream,
+) (*OpenAIGatewayHandler, *openAIResponsesHedgeCountingConcurrencyCache, *openAIResponsesHedgeUsageLogRepo) {
+	return newOpenAIResponsesHedgeHandlerFixtureWithCanary(
+		t, enabled, config.MaximumOpenAIHedgeCanaryBasisPoints, includeSecondary, upstream,
+	)
+}
+
+func newOpenAIResponsesHedgeHandlerFixtureWithCanary(
+	t *testing.T,
+	enabled bool,
+	canaryBasisPoints int,
 	includeSecondary bool,
 	upstream service.HTTPUpstream,
 ) (*OpenAIGatewayHandler, *openAIResponsesHedgeCountingConcurrencyCache, *openAIResponsesHedgeUsageLogRepo) {
@@ -218,6 +232,7 @@ func newOpenAIResponsesHedgeHandlerFixtureWithPool(
 	cfg := &config.Config{RunMode: config.RunModeSimple}
 	cfg.Gateway.Scheduling.OpenAIHedge = config.OpenAIHedgeConfig{
 		Enabled:                   enabled,
+		CanaryBasisPoints:         canaryBasisPoints,
 		StandardThresholdSeconds:  1,
 		HighThresholdSeconds:      1,
 		VeryHeavyThresholdSeconds: 1,
@@ -443,6 +458,38 @@ func TestOpenAIGatewayHandlerResponses_HedgeFeatureOffPreservesSinglePrimaryPath
 	require.Equal(t, int64(1), logs[0].AccountID)
 	require.Equal(t, 3, logs[0].InputTokens)
 	require.Equal(t, 2, logs[0].OutputTokens)
+}
+
+func TestOpenAIGatewayHandlerResponses_HedgeZeroBasisPointsRecordsShadowDecisionWithoutSecondary(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	primary := newOpenAIResponsesHedgePlan("zero-basis-primary", "primary")
+	secondary := newOpenAIResponsesHedgePlan("must-not-start", "secondary")
+	upstream := &openAIResponsesHedgeUpstream{plans: map[int64]*openAIResponsesHedgeUpstreamPlan{1: primary, 2: secondary}}
+	handler, concurrency, usageLogs := newOpenAIResponsesHedgeHandlerFixtureWithCanary(t, true, 0, true, upstream)
+	c, rec := newOpenAIResponsesHedgeHandlerContext(t, context.Background())
+
+	done := startOpenAIResponsesHedgeHandler(handler, c)
+	waitOpenAIResponsesHedgeSignal(t, primary.started, "zero-basis primary upstream")
+	select {
+	case <-secondary.started:
+		t.Fatal("zero-basis decision shadow launched a secondary upstream")
+	case <-time.After(1500 * time.Millisecond):
+	}
+	close(primary.release)
+	waitOpenAIResponsesHedgeSignal(t, done, "zero-basis handler completion")
+
+	require.Contains(t, rec.Body.String(), "zero-basis-primary")
+	require.NotContains(t, rec.Body.String(), "must-not-start")
+	require.Equal(t, "primary", rec.Header().Get("X-Request-Id"))
+	requireOpenAIResponsesHedgeLeaseCounts(t, concurrency, 1, 1, 0, 0)
+	logs := usageLogs.snapshot()
+	require.Len(t, logs, 1)
+	require.Equal(t, int64(1), logs[0].AccountID)
+	require.Equal(t, 3, logs[0].InputTokens)
+	require.Equal(t, 2, logs[0].OutputTokens)
+	stats := handler.adaptiveLatencyRuntime.Stats().Hedge
+	require.Zero(t, stats.CanarySelected)
+	require.Equal(t, uint64(1), stats.CanaryRejected)
 }
 
 func TestOpenAIGatewayHandlerResponses_HedgeIneligibleRequestPreservesSinglePrimaryPath(t *testing.T) {

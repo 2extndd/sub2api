@@ -1381,8 +1381,8 @@ type GatewaySchedulingConfig struct {
 	// 全量重建周期（秒），0 表示禁用
 	FullRebuildIntervalSeconds int `mapstructure:"full_rebuild_interval_seconds"`
 
-	// OpenAI hedge coordination is intentionally disabled until gateway wiring
-	// is added in a later slice.
+	// OpenAI hedge coordination is wired but remains disabled by default. A
+	// separate zero-default canary gate bounds dispatch when enabled.
 	OpenAIHedge OpenAIHedgeConfig `mapstructure:"openai_hedge"`
 
 	// OpenAI 延迟健康影子模式配置
@@ -1400,6 +1400,7 @@ const (
 	DefaultOpenAIHedgeCancelDrainTimeoutSeconds = 5
 	DefaultOpenAIHedgeMaxDuplicateCostMicros    = 100000
 	MaximumOpenAIHedgeMaxDuplicateCostMicros    = 10000000
+	MaximumOpenAIHedgeCanaryBasisPoints         = 10000
 	MaximumOpenAIHedgeThresholdSeconds          = 5 * 60
 	MaximumOpenAIHedgeEventChannelCapacity      = 1024
 	MaximumOpenAIHedgeMaxPrecommitEvents        = 4096
@@ -1407,10 +1408,12 @@ const (
 	MaximumOpenAIHedgeCancelDrainTimeoutSeconds = 60
 )
 
-// OpenAIHedgeConfig owns only the bounded coordinator policy. Enabled remains
-// false by default; declaring this config does not wire hedging into a gateway.
+// OpenAIHedgeConfig owns the bounded coordinator and rollout policy. Enabled
+// remains false by default, and zero canary basis points allow decision shadow
+// without transferring a lease or dispatching a secondary attempt.
 type OpenAIHedgeConfig struct {
 	Enabled                   bool   `mapstructure:"enabled"`
+	CanaryBasisPoints         int    `mapstructure:"canary_basis_points"`
 	StandardThresholdSeconds  int    `mapstructure:"standard_threshold_seconds"`
 	HighThresholdSeconds      int    `mapstructure:"high_threshold_seconds"`
 	VeryHeavyThresholdSeconds int    `mapstructure:"very_heavy_threshold_seconds"`
@@ -2469,6 +2472,7 @@ func setDefaults() {
 	viper.SetDefault("gateway.scheduling.snapshot_mget_chunk_size", 128)
 	viper.SetDefault("gateway.scheduling.snapshot_write_chunk_size", 256)
 	viper.SetDefault("gateway.scheduling.openai_hedge.enabled", false)
+	viper.SetDefault("gateway.scheduling.openai_hedge.canary_basis_points", 0)
 	viper.SetDefault("gateway.scheduling.openai_hedge.standard_threshold_seconds", DefaultOpenAIHedgeStandardThresholdSeconds)
 	viper.SetDefault("gateway.scheduling.openai_hedge.high_threshold_seconds", DefaultOpenAIHedgeHighThresholdSeconds)
 	viper.SetDefault("gateway.scheduling.openai_hedge.very_heavy_threshold_seconds", DefaultOpenAIHedgeVeryHeavyThresholdSeconds)
@@ -3657,6 +3661,12 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("gateway.scheduling.snapshot_write_chunk_size must be positive")
 	}
 	hedge := c.Gateway.Scheduling.OpenAIHedge
+	if hedge.CanaryBasisPoints < 0 || hedge.CanaryBasisPoints > MaximumOpenAIHedgeCanaryBasisPoints {
+		return fmt.Errorf(
+			"gateway.scheduling.openai_hedge.canary_basis_points must be between 0 and %d",
+			MaximumOpenAIHedgeCanaryBasisPoints,
+		)
+	}
 	minimumHedgeValue := 0
 	if hedge.Enabled {
 		minimumHedgeValue = 1

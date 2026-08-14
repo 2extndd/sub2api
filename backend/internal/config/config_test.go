@@ -504,9 +504,19 @@ func TestLoadOpenAIHedgeDefaultsDisabled(t *testing.T) {
 	require.Equal(t, DefaultOpenAIHedgeMaxPrecommitEvents, hedge.MaxPrecommitEvents)
 	require.Equal(t, DefaultOpenAIHedgeMaxPrecommitBytes, hedge.MaxPrecommitBytes)
 	require.Equal(t, DefaultOpenAIHedgeCancelDrainTimeoutSeconds, hedge.CancelDrainTimeoutSeconds)
+	require.Zero(t, hedge.CanaryBasisPoints)
 	require.Equal(t, 2, hedge.MaxAttempts)
 	require.False(t, hedge.VeryHeavyEnabled)
 	require.False(t, hedge.NoProgressEnabled)
+}
+
+func TestLoadOpenAIHedgeCanaryBasisPoints(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	viper.Set("gateway.scheduling.openai_hedge.canary_basis_points", 125)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, 125, cfg.Gateway.Scheduling.OpenAIHedge.CanaryBasisPoints)
 }
 
 func TestValidateOpenAIHedgePolicy(t *testing.T) {
@@ -523,6 +533,9 @@ func TestValidateOpenAIHedgePolicy(t *testing.T) {
 		wantErrText string
 	}{
 		{name: "valid defaults", mutate: func(*OpenAIHedgeConfig) {}},
+		{name: "full canary basis points", mutate: func(h *OpenAIHedgeConfig) { h.CanaryBasisPoints = MaximumOpenAIHedgeCanaryBasisPoints }},
+		{name: "negative canary basis points", mutate: func(h *OpenAIHedgeConfig) { h.CanaryBasisPoints = -1 }, wantErrText: "canary_basis_points"},
+		{name: "canary basis points above maximum", mutate: func(h *OpenAIHedgeConfig) { h.CanaryBasisPoints = MaximumOpenAIHedgeCanaryBasisPoints + 1 }, wantErrText: "canary_basis_points"},
 		{name: "zero standard threshold", mutate: func(h *OpenAIHedgeConfig) { h.StandardThresholdSeconds = 0 }, wantErrText: "standard_threshold_seconds"},
 		{name: "high before standard", mutate: func(h *OpenAIHedgeConfig) { h.HighThresholdSeconds = h.StandardThresholdSeconds - 1 }, wantErrText: "high_threshold_seconds"},
 		{name: "very heavy before high", mutate: func(h *OpenAIHedgeConfig) { h.VeryHeavyThresholdSeconds = h.HighThresholdSeconds - 1 }, wantErrText: "very_heavy_threshold_seconds"},

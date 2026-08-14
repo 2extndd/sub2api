@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	OpenAILatencyTelemetrySchemaVersion     uint16 = 5
+	OpenAILatencyTelemetrySchemaVersion     uint16 = 6
 	DefaultOpenAILatencyTelemetryMaxStreams int    = 256
 )
 
@@ -114,6 +114,8 @@ const (
 	OpenAIHedgeOutcomeHedgeWon
 	OpenAIHedgeOutcomeBothFailed
 	OpenAIHedgeOutcomeCanceled
+	OpenAIHedgeOutcomeCanarySelected
+	OpenAIHedgeOutcomeCanaryRejected
 	OpenAIHedgeOutcomeCardinality
 )
 
