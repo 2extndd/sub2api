@@ -895,18 +895,8 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 					}
 					upstreamDetail = truncateString(string(respBody), maxBytes)
 				}
-				appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
-					Platform:           account.Platform,
-					AccountID:          account.ID,
-					AccountName:        account.Name,
-					UpstreamStatusCode: resp.StatusCode,
-					UpstreamRequestID:  resp.Header.Get("x-request-id"),
-					Kind:               "failover",
-					Message:            upstreamMsg,
-					Detail:             upstreamDetail,
-				})
-
 				shouldDisable := s.handleFailoverSideEffects(ctx, resp, account, respBody, upstreamModel)
+				appendResponsesUpstreamFailover(c, account, resp, respBody, upstreamMsg, upstreamDetail, shouldDisable)
 				return nil, newOpenAIUpstreamFailoverError(
 					resp.StatusCode,
 					resp.Header,

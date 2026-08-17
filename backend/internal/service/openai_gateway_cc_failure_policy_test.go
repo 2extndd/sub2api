@@ -62,7 +62,7 @@ func TestAppendResponsesUpstreamFailoverAppliesGatewayPolicyBeforeOpsAppend(t *t
 	body := []byte(`{"error":{"message":"upstream unavailable"}}`)
 	resp := &http.Response{StatusCode: http.StatusBadGateway, Header: make(http.Header)}
 
-	policy := appendResponsesUpstreamFailover(c, account, resp, body, "upstream unavailable")
+	policy := appendResponsesUpstreamFailover(c, account, resp, body, "upstream unavailable", "", false)
 
 	assertSingleOpsEventUsesPolicy(t, c, policy)
 }

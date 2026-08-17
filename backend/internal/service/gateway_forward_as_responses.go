@@ -161,7 +161,7 @@ func (s *GatewayService) ForwardAsResponses(
 		upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
 
 		if s.shouldFailoverUpstreamError(resp.StatusCode) {
-			appendResponsesUpstreamFailover(c, account, resp, respBody, upstreamMsg)
+			appendResponsesUpstreamFailover(c, account, resp, respBody, upstreamMsg, "", false)
 			if s.rateLimitService != nil {
 				s.rateLimitService.HandleUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, mappedModel)
 			}
@@ -188,8 +188,11 @@ func (s *GatewayService) ForwardAsResponses(
 	return result, handleErr
 }
 
-func appendResponsesUpstreamFailover(c *gin.Context, account *Account, resp *http.Response, responseBody []byte, upstreamMsg string) GatewayFailurePolicy {
+func appendResponsesUpstreamFailover(c *gin.Context, account *Account, resp *http.Response, responseBody []byte, upstreamMsg, upstreamDetail string, forceNextAccount bool) GatewayFailurePolicy {
 	policy := ClassifyUpstreamHTTPFailure(resp.StatusCode, responseBody, resp.Header)
+	if forceNextAccount {
+		policy.Retry = GatewayRetryNextAccount
+	}
 	SetOpsFailurePolicy(c, policy)
 	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 		Platform:           account.Platform,
@@ -199,6 +202,7 @@ func appendResponsesUpstreamFailover(c *gin.Context, account *Account, resp *htt
 		UpstreamRequestID:  resp.Header.Get("x-request-id"),
 		Kind:               "failover",
 		Message:            upstreamMsg,
+		Detail:             upstreamDetail,
 	})
 	return policy
 }
