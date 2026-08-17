@@ -248,12 +248,14 @@ func newOpenAIUpstreamFailoverError(
 	upstreamMsg string,
 	retryableOnSameAccount bool,
 ) *UpstreamFailoverError {
-	failoverErr := &UpstreamFailoverError{
-		StatusCode:             statusCode,
-		ResponseBody:           responseBody,
-		ResponseHeaders:        responseHeaders.Clone(),
-		RetryableOnSameAccount: retryableOnSameAccount,
+	policy := ClassifyUpstreamHTTPFailure(statusCode, responseBody, responseHeaders)
+	if retryableOnSameAccount {
+		policy.Retry = GatewayRetrySameThenNext
+	} else {
+		policy.Retry = GatewayRetryNextAccount
 	}
+	failoverErr := policy.NewFailoverError(responseBody)
+	failoverErr.ResponseHeaders = responseHeaders.Clone()
 	if isOpenAIRequestBodyTooLargeError(statusCode, upstreamMsg, responseBody) {
 		failoverErr.RetryableOnSameAccount = false
 		failoverErr.Scope = GatewayFailureScopeAccount
@@ -384,6 +386,9 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 	}
 
 	if isOpenAIRequestBodyTooLargeError(resp.StatusCode, upstreamMsg, body) {
+		policy := ClassifyUpstreamHTTPFailure(resp.StatusCode, body, resp.Header)
+		policy.Retry = GatewayRetryNextAccount
+		SetOpsFailurePolicy(c, policy)
 		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 			Platform:           account.Platform,
 			AccountID:          account.ID,
@@ -464,6 +469,11 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 		reqModel = canonicalOpenAIAccountSchedulingModel(account, reqModel)
 	}
 	shouldDisable := s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, reqModel)
+	policy := ClassifyUpstreamHTTPFailure(resp.StatusCode, body, resp.Header)
+	if shouldDisable {
+		policy.Retry = GatewayRetryNextAccount
+	}
+	SetOpsFailurePolicy(c, policy)
 	kind := "http_error"
 	if shouldDisable {
 		kind = "failover"
@@ -641,6 +651,11 @@ func (s *OpenAIGatewayService) handleCompatErrorResponse(
 	shouldDisable := s.handleOpenAIAccountUpstreamError(
 		c.Request.Context(), account, resp.StatusCode, resp.Header, body, modelForCooldown,
 	)
+	policy := ClassifyUpstreamHTTPFailure(resp.StatusCode, body, resp.Header)
+	if shouldDisable {
+		policy.Retry = GatewayRetryNextAccount
+	}
+	SetOpsFailurePolicy(c, policy)
 	kind := "http_error"
 	if shouldDisable {
 		kind = "failover"

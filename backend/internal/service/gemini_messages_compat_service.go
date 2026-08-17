@@ -781,6 +781,8 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 
 		resp, err = s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
 		if err != nil {
+			failurePolicy := ClassifyUpstreamTransportFailure(err)
+			SetOpsFailurePolicy(c, failurePolicy)
 			safeErr := sanitizeUpstreamErrorMessage(err.Error())
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 				Platform:           account.Platform,
@@ -790,13 +792,16 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 				Kind:               "request_error",
 				Message:            safeErr,
 			})
-			if attempt < geminiMaxRetries {
+			if failurePolicy.Class == GatewayFailureClientCanceled {
+				return nil, err
+			}
+			if attempt < geminiMaxRetries && failurePolicy.CanRetrySameAccount() {
 				logger.LegacyPrintf("service.gemini_messages_compat", "Gemini account %d: upstream request failed, retry %d/%d: %v", account.ID, attempt, geminiMaxRetries, err)
 				sleepGeminiBackoff(attempt)
 				continue
 			}
 			setOpsUpstreamError(c, 0, safeErr, "")
-			return nil, s.writeClaudeError(c, http.StatusBadGateway, "upstream_error", "Upstream request failed after retries: "+safeErr)
+			return nil, failurePolicy.NewFailoverError(nil)
 		}
 
 		// Special-case: signature/thought_signature validation errors are not transient, but may be fixed by
@@ -936,6 +941,8 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 
 	if resp.StatusCode >= 400 {
 		respBody := s.readUpstreamErrorBody(resp)
+		failurePolicy := ClassifyUpstreamHTTPFailure(resp.StatusCode, respBody, resp.Header)
+		SetOpsFailurePolicy(c, failurePolicy)
 		// 统一错误策略：自定义错误码 + 临时不可调度
 		if s.rateLimitService != nil {
 			policy := s.rateLimitService.CheckErrorPolicy(ctx, account, resp.StatusCode, respBody, mappedModel)
@@ -1011,7 +1018,9 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 					Message:            upstreamMsg,
 					Detail:             upstreamDetail,
 				})
-				return nil, &UpstreamFailoverError{StatusCode: resp.StatusCode, ResponseBody: respBody, RetryableOnSameAccount: true}
+				failurePolicy.Retry = GatewayRetrySameThenNext
+				SetOpsFailurePolicy(c, failurePolicy)
+				return nil, failurePolicy.NewFailoverError(respBody)
 			}
 		}
 		if s.shouldFailoverGeminiUpstreamError(resp.StatusCode) {
@@ -1045,6 +1054,20 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		if upstreamReqID == "" {
 			upstreamReqID = resp.Header.Get("x-goog-request-id")
 		}
+		if failurePolicy.CanRetryNextAccount() {
+			upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(respBody)))
+			setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, "")
+			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+				Platform:           account.Platform,
+				AccountID:          account.ID,
+				AccountName:        account.Name,
+				UpstreamStatusCode: resp.StatusCode,
+				UpstreamRequestID:  upstreamReqID,
+				Kind:               "failover",
+				Message:            upstreamMsg,
+			})
+			return nil, failurePolicy.NewFailoverError(respBody)
+		}
 		return nil, s.writeGeminiMappedError(c, account, resp.StatusCode, upstreamReqID, respBody)
 	}
 
@@ -1061,7 +1084,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 	if req.Stream {
 		streamRes, err := s.handleStreamingResponse(c, resp, startTime, originalModel)
 		if err != nil {
-			return nil, err
+			return nil, newGeminiStreamFailure(c, account, err)
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
@@ -1069,7 +1092,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		if useUpstreamStream {
 			collected, usageObj, err := collectGeminiSSE(resp.Body, true)
 			if err != nil {
-				return nil, s.writeClaudeError(c, http.StatusBadGateway, "upstream_error", "Failed to read upstream stream")
+				return nil, newGeminiStreamFailure(c, account, err)
 			}
 			collectedBytes, _ := json.Marshal(collected)
 			claudeResp, usageObj2 := convertGeminiToClaudeMessage(collected, originalModel, collectedBytes, false)
@@ -1311,6 +1334,8 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 
 		resp, err = s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
 		if err != nil {
+			failurePolicy := ClassifyUpstreamTransportFailure(err)
+			SetOpsFailurePolicy(c, failurePolicy)
 			safeErr := sanitizeUpstreamErrorMessage(err.Error())
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 				Platform:           account.Platform,
@@ -1320,12 +1345,15 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 				Kind:               "request_error",
 				Message:            safeErr,
 			})
-			if attempt < geminiMaxRetries {
+			if failurePolicy.Class == GatewayFailureClientCanceled {
+				return nil, err
+			}
+			if attempt < geminiMaxRetries && failurePolicy.CanRetrySameAccount() {
 				logger.LegacyPrintf("service.gemini_messages_compat", "Gemini account %d: upstream request failed, retry %d/%d: %v", account.ID, attempt, geminiMaxRetries, err)
 				sleepGeminiBackoff(attempt)
 				continue
 			}
-			if action == "countTokens" {
+			if action == "countTokens" && !failurePolicy.CanRetryNextAccount() {
 				estimated := estimateGeminiCountTokens(body)
 				c.JSON(http.StatusOK, map[string]any{"totalTokens": estimated})
 				return &ForwardResult{
@@ -1339,7 +1367,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 				}, nil
 			}
 			setOpsUpstreamError(c, 0, safeErr, "")
-			return nil, s.writeGoogleError(c, http.StatusBadGateway, "Upstream request failed after retries: "+safeErr)
+			return nil, failurePolicy.NewFailoverError(nil)
 		}
 
 		// 错误策略优先：匹配则跳过重试直接处理。
@@ -1433,6 +1461,8 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 
 	if resp.StatusCode >= 400 {
 		respBody := s.readUpstreamErrorBody(resp)
+		failurePolicy := ClassifyUpstreamHTTPFailure(resp.StatusCode, respBody, resp.Header)
+		SetOpsFailurePolicy(c, failurePolicy)
 		// Best-effort fallback for OAuth tokens missing AI Studio scopes when calling countTokens.
 		// This avoids Gemini SDKs failing hard during preflight token counting.
 		// Checked before error policy so it always works regardless of custom error codes.
@@ -1522,7 +1552,9 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 					Message:            upstreamMsg,
 					Detail:             upstreamDetail,
 				})
-				return nil, &UpstreamFailoverError{StatusCode: resp.StatusCode, ResponseBody: evBody, RetryableOnSameAccount: true}
+				failurePolicy.Retry = GatewayRetrySameThenNext
+				SetOpsFailurePolicy(c, failurePolicy)
+				return nil, failurePolicy.NewFailoverError(evBody)
 			}
 		}
 		if s.shouldFailoverGeminiUpstreamError(resp.StatusCode) {
@@ -1563,16 +1595,23 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 			logger.LegacyPrintf("service.gemini_messages_compat", "[Gemini] native upstream error %d: %s", resp.StatusCode, truncateForLog(respBody, s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes))
 		}
 		setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
+		kind := "http_error"
+		if failurePolicy.CanRetryNextAccount() {
+			kind = "failover"
+		}
 		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 			Platform:           account.Platform,
 			AccountID:          account.ID,
 			AccountName:        account.Name,
 			UpstreamStatusCode: resp.StatusCode,
 			UpstreamRequestID:  requestID,
-			Kind:               "http_error",
+			Kind:               kind,
 			Message:            upstreamMsg,
 			Detail:             upstreamDetail,
 		})
+		if failurePolicy.CanRetryNextAccount() {
+			return nil, failurePolicy.NewFailoverError(respBody)
+		}
 
 		contentType := resp.Header.Get("Content-Type")
 		if contentType == "" {
@@ -1592,7 +1631,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 	if stream {
 		streamRes, err := s.handleNativeStreamingResponse(c, resp, startTime, isOAuth)
 		if err != nil {
-			return nil, err
+			return nil, newGeminiStreamFailure(c, account, err)
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
@@ -1600,7 +1639,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 		if useUpstreamStream {
 			collected, usageObj, err := collectGeminiSSE(resp.Body, isOAuth)
 			if err != nil {
-				return nil, s.writeGoogleError(c, http.StatusBadGateway, "Failed to read upstream stream")
+				return nil, newGeminiStreamFailure(c, account, err)
 			}
 			b, _ := json.Marshal(collected)
 			c.Data(http.StatusOK, "application/json", b)
@@ -1748,6 +1787,34 @@ func sanitizeUpstreamErrorMessage(msg string) string {
 		return msg
 	}
 	return sensitiveQueryParamRegex.ReplaceAllString(msg, `$1***`)
+}
+
+func newGeminiStreamFailure(c *gin.Context, account *Account, err error) error {
+	policy := ClassifyUpstreamTransportFailure(err)
+	if policy.Class == GatewayFailureClientCanceled {
+		SetOpsFailurePolicy(c, policy)
+		return err
+	}
+	committed := false
+	if c != nil {
+		committed = c.Writer.Written()
+	}
+	policy = ClassifyUpstreamStreamFailure([]byte(err.Error()), committed)
+	SetOpsFailurePolicy(c, policy)
+	const message = "upstream stream read failed"
+	setOpsUpstreamError(c, 0, message, "")
+	event := OpsUpstreamErrorEvent{
+		Kind:    "stream_error",
+		Stage:   string(GatewayFailureStageInference),
+		Message: message,
+	}
+	if account != nil {
+		event.Platform = account.Platform
+		event.AccountID = account.ID
+		event.AccountName = account.Name
+	}
+	appendOpsUpstreamError(c, event)
+	return policy.NewFailoverError(nil)
 }
 
 func (s *GeminiMessagesCompatService) writeGeminiMappedError(c *gin.Context, account *Account, upstreamStatus int, upstreamRequestID string, body []byte) error {

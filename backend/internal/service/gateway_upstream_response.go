@@ -1037,11 +1037,10 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 							"message": disconnectMsg,
 						},
 					})
-					return nil, &UpstreamFailoverError{
-						StatusCode:             http.StatusBadGateway,
-						ResponseBody:           body,
-						RetryableOnSameAccount: true,
-					}
+					policy := ClassifyUpstreamTransportFailure(ev.err)
+					policy.ResponseCommitted = false
+					SetOpsFailurePolicy(c, policy)
+					return nil, policy.NewFailoverError(body)
 				}
 				sendErrorEvent("stream_read_error", disconnectMsg)
 				return &streamingResult{usage: usage, firstTokenMs: firstTokenMs}, fmt.Errorf("stream read error: %w", ev.err)

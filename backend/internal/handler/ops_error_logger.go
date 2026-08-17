@@ -1298,6 +1298,40 @@ func applyOpsUpstreamFieldsFromContext(c *gin.Context, entry *service.OpsInsertE
 			}
 		}
 	}
+	if v, ok := c.Get(service.OpsProviderErrorCodeKey); ok {
+		if value, ok := v.(string); ok {
+			if value = strings.TrimSpace(value); value != "" {
+				entry.ProviderErrorCode = &value
+			}
+		}
+	}
+	if v, ok := c.Get(service.OpsProviderErrorTypeKey); ok {
+		if value, ok := v.(string); ok {
+			if value = strings.TrimSpace(value); value != "" {
+				entry.ProviderErrorType = &value
+			}
+		}
+	}
+	if v, ok := c.Get(service.OpsNetworkErrorTypeKey); ok {
+		if value, ok := v.(string); ok {
+			if value = strings.TrimSpace(value); value != "" {
+				entry.NetworkErrorType = &value
+			}
+		}
+	}
+	if v, ok := c.Get(service.OpsRetryAfterSecondsKey); ok {
+		switch value := v.(type) {
+		case int:
+			if value > 0 {
+				entry.RetryAfterSeconds = &value
+			}
+		case int64:
+			if value > 0 {
+				converted := int(value)
+				entry.RetryAfterSeconds = &converted
+			}
+		}
+	}
 	if v, ok := c.Get(service.OpsUpstreamErrorsKey); ok {
 		if events, ok := v.([]*service.OpsUpstreamErrorEvent); ok && len(events) > 0 {
 			entry.UpstreamErrors = events

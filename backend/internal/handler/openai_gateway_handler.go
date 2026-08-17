@@ -2860,7 +2860,10 @@ func openAIForwardMayFailover(c *gin.Context, writerSizeBeforeForward int, failo
 	if service.OpenAICompactKeepaliveAdjustedWrittenSize(c) == writerSizeBeforeForward {
 		return true
 	}
-	return failoverErr != nil && failoverErr.SafeToFailoverAfterWrite
+	if failoverErr == nil || failoverErr.ResponseCommitted {
+		return false
+	}
+	return failoverErr.SafeToFailoverAfterWrite
 }
 
 func openAIRequestAllowsFailoverReplay(c *gin.Context) bool {

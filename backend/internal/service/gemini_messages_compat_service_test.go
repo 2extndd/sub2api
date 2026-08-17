@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -500,6 +502,132 @@ func TestGeminiMessagesCompatServiceForward_PreservesRequestedModelAndMappedUpst
 	require.Equal(t, 1, httpStub.calls)
 	require.NotNil(t, httpStub.lastReq)
 	require.Contains(t, httpStub.lastReq.URL.String(), "/models/claude-sonnet-4-20250514:")
+}
+
+func TestGeminiMessagesCompatServiceForward_TransportFailureReturnsPolicyFailoverError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+
+	httpStub := &geminiCompatHTTPUpstreamStub{err: syscall.ECONNREFUSED}
+	svc := &GeminiMessagesCompatService{httpUpstream: httpStub, cfg: &config.Config{}}
+	account := &Account{
+		ID:   79,
+		Type: AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"api_key": "test-key",
+		},
+	}
+	body := []byte(`{"model":"gemini-2.5-pro","max_tokens":16,"messages":[{"role":"user","content":"hello"}]}`)
+
+	result, err := svc.Forward(context.Background(), c, account, body)
+	require.Nil(t, result)
+	var failoverErr *UpstreamFailoverError
+	require.ErrorAs(t, err, &failoverErr)
+	require.Equal(t, GatewayFailureConnectionRefused, failoverErr.FailureClass)
+	require.Equal(t, GatewayRetryNextAccount, failoverErr.RetryDisposition)
+	require.True(t, failoverErr.ShouldRetryNextAccount())
+	require.False(t, c.Writer.Written())
+	require.Equal(t, 1, httpStub.calls, "persistent transport failures must skip same-account retry")
+}
+
+func TestGeminiMessagesCompatServiceForward_RetryableHTTPFailureReturnsPolicyFailoverError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+
+	httpStub := &geminiCompatHTTPUpstreamStub{response: &http.Response{
+		StatusCode: http.StatusUnauthorized,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader(`{"error":{"type":"invalid_api_key","message":"invalid key"}}`)),
+	}}
+	svc := &GeminiMessagesCompatService{httpUpstream: httpStub, cfg: &config.Config{}}
+	account := &Account{
+		ID:   80,
+		Type: AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"api_key": "test-key",
+		},
+	}
+	body := []byte(`{"model":"gemini-2.5-pro","max_tokens":16,"messages":[{"role":"user","content":"hello"}]}`)
+
+	result, err := svc.Forward(context.Background(), c, account, body)
+	require.Nil(t, result)
+	var failoverErr *UpstreamFailoverError
+	require.ErrorAs(t, err, &failoverErr)
+	EnrichUpstreamFailoverError(c, failoverErr)
+	require.Equal(t, GatewayFailureAccountAuth, failoverErr.FailureClass)
+	require.Equal(t, GatewayRetryNextAccount, failoverErr.RetryDisposition)
+	require.True(t, failoverErr.Persistent)
+	require.True(t, failoverErr.ShouldRetryNextAccount())
+	require.False(t, c.Writer.Written())
+	require.Equal(t, 1, httpStub.calls)
+}
+
+func TestGeminiMessagesCompatServiceForwardNative_TransportFailureReturnsPolicyFailoverError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-2.5-pro:generateContent", nil)
+
+	httpStub := &geminiCompatHTTPUpstreamStub{err: syscall.ECONNREFUSED}
+	svc := &GeminiMessagesCompatService{httpUpstream: httpStub, cfg: &config.Config{}}
+	account := &Account{
+		ID:   81,
+		Type: AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"api_key": "test-key",
+		},
+	}
+	body := []byte(`{"contents":[{"role":"user","parts":[{"text":"hello"}]}]}`)
+
+	result, err := svc.ForwardNative(context.Background(), c, account, "gemini-2.5-pro", "generateContent", false, body)
+	require.Nil(t, result)
+	var failoverErr *UpstreamFailoverError
+	require.ErrorAs(t, err, &failoverErr)
+	require.Equal(t, GatewayFailureConnectionRefused, failoverErr.FailureClass)
+	require.Equal(t, GatewayRetryNextAccount, failoverErr.RetryDisposition)
+	require.True(t, failoverErr.ShouldRetryNextAccount())
+	require.False(t, c.Writer.Written())
+	require.Equal(t, 1, httpStub.calls)
+}
+
+func TestNewGeminiStreamFailureRespectsCommitAndCancellation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	account := &Account{ID: 82, Platform: PlatformGemini}
+
+	t.Run("pre-commit can fail over", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		err := newGeminiStreamFailure(c, account, io.ErrUnexpectedEOF)
+		var failoverErr *UpstreamFailoverError
+		require.ErrorAs(t, err, &failoverErr)
+		require.False(t, failoverErr.ResponseCommitted)
+		require.True(t, failoverErr.ShouldRetryNextAccount())
+	})
+
+	t.Run("post-commit cannot fail over", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		_, writeErr := c.Writer.Write([]byte("data: partial\n\n"))
+		require.NoError(t, writeErr)
+		err := newGeminiStreamFailure(c, account, io.ErrUnexpectedEOF)
+		var failoverErr *UpstreamFailoverError
+		require.ErrorAs(t, err, &failoverErr)
+		require.True(t, failoverErr.ResponseCommitted)
+		require.False(t, failoverErr.ShouldRetryNextAccount())
+	})
+
+	t.Run("client cancellation stays terminal", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		err := newGeminiStreamFailure(c, account, context.Canceled)
+		require.True(t, errors.Is(err, context.Canceled))
+		var failoverErr *UpstreamFailoverError
+		require.False(t, errors.As(err, &failoverErr))
+	})
 }
 
 func TestGeminiMessagesCompatServiceForward_NormalizesWebSearchToolForAIStudio(t *testing.T) {

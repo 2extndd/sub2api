@@ -640,6 +640,20 @@ type UpstreamFailoverError struct {
 	NextAccountAction        NextAccountAction
 	ClientStatusCode         int
 	ClientMessage            string
+
+	// Universal failure diagnostics. These fields are bounded and safe to persist
+	// in aggregate operations telemetry; they never contain request content.
+	FailureClass      GatewayFailureClass
+	RetryDisposition  GatewayRetryDisposition
+	StatusKnown       bool
+	Persistent        bool
+	ResponseCommitted bool
+	NetworkErrorType  string
+	ProviderErrorType string
+	ProviderErrorCode string
+	RetryAfterSeconds int
+	TextCategory      string
+	TextSignature     string
 }
 
 func (e *UpstreamFailoverError) Error() string {
@@ -681,7 +695,14 @@ func (e *sseStreamErrorEventError) Error() string { return "have error in stream
 // TempUnscheduleRetryableError 对 RetryableOnSameAccount 类型的 failover 错误触发临时封禁。
 // 由 handler 层在同账号重试全部用尽、切换账号时调用。
 func (s *GatewayService) TempUnscheduleRetryableError(ctx context.Context, accountID int64, failoverErr *UpstreamFailoverError) {
-	if failoverErr == nil || !failoverErr.RetryableOnSameAccount {
+	if failoverErr == nil || (!failoverErr.RetryableOnSameAccount && !failoverErr.Persistent) {
+		return
+	}
+	// Prefer the universal class; retain status-based behavior for legacy errors.
+	switch failoverErr.FailureClass {
+	case GatewayFailureDNS, GatewayFailureTLS, GatewayFailureProxyAuth,
+		GatewayFailureConnectionRefused, GatewayFailureNetworkUnreachable:
+		tempUnscheduleEmptyResponse(ctx, s.accountRepo, accountID, "[handler]")
 		return
 	}
 	// 根据状态码选择封禁策略

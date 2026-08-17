@@ -384,7 +384,8 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 			if !errors.Is(err, context.Canceled) {
 				scheduleOllamaCloudUsageActivity(s.deferredService, account)
 			}
-			// Ensure the client receives an error response (handlers assume Forward writes on non-failover errors).
+			policy := ClassifyUpstreamTransportFailure(err)
+			SetOpsFailurePolicy(c, policy)
 			safeErr := sanitizeUpstreamErrorMessage(err.Error())
 			setOpsUpstreamError(c, 0, safeErr, "")
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
@@ -394,16 +395,15 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 				UpstreamStatusCode: 0,
 				UpstreamURL:        safeUpstreamURL(upstreamReq.URL.String()),
 				Kind:               "request_error",
+				Stage:              string(GatewayFailureStageInference),
+				Scope:              string(policy.Scope),
+				Reason:             string(policy.Class),
 				Message:            safeErr,
 			})
-			c.JSON(http.StatusBadGateway, gin.H{
-				"type": "error",
-				"error": gin.H{
-					"type":    "upstream_error",
-					"message": "Upstream request failed",
-				},
-			})
-			return nil, fmt.Errorf("upstream request failed: %s", safeErr)
+			if policy.Class == GatewayFailureClientCanceled {
+				return nil, err
+			}
+			return nil, policy.NewFailoverError(nil)
 		}
 
 		// 优先检测thinking block签名错误（400）并重试一次
@@ -661,7 +661,18 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		break
 	}
 	if resp == nil || resp.Body == nil {
-		return nil, errors.New("upstream request failed: empty response")
+		policy := ClassifyUpstreamTransportFailure(nil)
+		SetOpsFailurePolicy(c, policy)
+		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+			Platform:    account.Platform,
+			AccountID:   account.ID,
+			AccountName: account.Name,
+			Kind:        "empty_response",
+			Stage:       string(GatewayFailureStageInference),
+			Scope:       string(policy.Scope),
+			Reason:      string(policy.Class),
+		})
+		return nil, policy.NewFailoverError(nil)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -677,6 +688,11 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 				account.ID, account.Name, resp.StatusCode, resp.Header.Get("x-request-id"), truncateString(string(respBody), 1000))
 
 			s.handleRetryExhaustedSideEffects(ctx, resp, account)
+			policy := ClassifyUpstreamHTTPFailure(resp.StatusCode, respBody, resp.Header)
+			SetOpsFailurePolicy(c, policy)
+			if account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode) {
+				policy.Retry = GatewayRetrySameThenNext
+			}
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 				Platform:           account.Platform,
 				AccountID:          account.ID,
@@ -684,6 +700,9 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 				UpstreamStatusCode: resp.StatusCode,
 				UpstreamRequestID:  resp.Header.Get("x-request-id"),
 				Kind:               "retry_exhausted_failover",
+				Stage:              string(GatewayFailureStageInference),
+				Scope:              string(policy.Scope),
+				Reason:             string(policy.Class),
 				Message:            extractUpstreamErrorMessage(respBody),
 				Detail: func() string {
 					if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
@@ -692,11 +711,9 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 					return ""
 				}(),
 			})
-			return nil, &UpstreamFailoverError{
-				StatusCode:             resp.StatusCode,
-				ResponseBody:           respBody,
-				RetryableOnSameAccount: account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
-			}
+			failoverErr := policy.NewFailoverError(respBody)
+			failoverErr.ResponseHeaders = resp.Header.Clone()
+			return nil, failoverErr
 		}
 		return s.handleRetryExhaustedError(ctx, resp, c, account)
 	}
@@ -712,12 +729,20 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 			account.ID, account.Name, resp.StatusCode, resp.Header.Get("x-request-id"), truncateString(string(respBody), 1000))
 
 		s.handleFailoverSideEffects(ctx, resp, account, reqModel)
+		policy := ClassifyUpstreamHTTPFailure(resp.StatusCode, respBody, resp.Header)
+		SetOpsFailurePolicy(c, policy)
+		if account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode) {
+			policy.Retry = GatewayRetrySameThenNext
+		}
 		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 			Platform:           account.Platform,
 			AccountID:          account.ID,
 			UpstreamStatusCode: resp.StatusCode,
 			UpstreamRequestID:  resp.Header.Get("x-request-id"),
 			Kind:               "failover",
+			Stage:              string(GatewayFailureStageInference),
+			Scope:              string(policy.Scope),
+			Reason:             string(policy.Class),
 			Message:            extractUpstreamErrorMessage(respBody),
 			Detail: func() string {
 				if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
@@ -726,11 +751,9 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 				return ""
 			}(),
 		})
-		return nil, &UpstreamFailoverError{
-			StatusCode:             resp.StatusCode,
-			ResponseBody:           respBody,
-			RetryableOnSameAccount: account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
-		}
+		failoverErr := policy.NewFailoverError(respBody)
+		failoverErr.ResponseHeaders = resp.Header.Clone()
+		return nil, failoverErr
 	}
 	if resp.StatusCode >= 400 {
 		// 可选：对部分 400 触发 failover（默认关闭以保持语义）
@@ -821,13 +844,20 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 					upstreamDetail = truncateString(sseErr.RawData, maxBytes)
 				}
 
+				policy := ClassifyUpstreamStreamFailure(body, c.Writer.Written())
+				policy.StatusKnown = true
+				SetOpsFailurePolicy(c, policy)
+				policy.ClientStatusCode = http.StatusForbidden
 				appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 					Platform:           account.Platform,
 					AccountID:          account.ID,
 					AccountName:        account.Name,
-					UpstreamStatusCode: 403,
+					UpstreamStatusCode: resp.StatusCode,
 					UpstreamRequestID:  resp.Header.Get("x-request-id"),
 					Kind:               "stream_error",
+					Stage:              string(GatewayFailureStageInference),
+					Scope:              string(policy.Scope),
+					Reason:             string(policy.Class),
 					Message:            upstreamMsg,
 					Detail:             upstreamDetail,
 				})
@@ -838,10 +868,9 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 					truncateString(sseErr.RawData, 1000),
 				)
 
-				return nil, &UpstreamFailoverError{
-					StatusCode:   403,
-					ResponseBody: body,
-				}
+				failoverErr := policy.NewFailoverError(body)
+				failoverErr.ResponseHeaders = resp.Header.Clone()
+				return nil, failoverErr
 			}
 			// 流中断（缺失 terminal 事件、读错误、数据间隔超时等）时保留已观测到的
 			// usage 与错误一起返回，handler 在错误处理完成后照常提交 usage 记录。

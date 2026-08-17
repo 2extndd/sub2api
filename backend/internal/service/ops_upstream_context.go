@@ -15,6 +15,12 @@ const (
 	OpsUpstreamErrorMessageKey = "ops_upstream_error_message"
 	OpsUpstreamErrorDetailKey  = "ops_upstream_error_detail"
 	OpsUpstreamErrorsKey       = "ops_upstream_errors"
+	OpsFailurePolicyKey        = "ops_failure_policy"
+	OpsNetworkErrorTypeKey     = "ops_network_error_type"
+	OpsProviderErrorTypeKey    = "ops_provider_error_type"
+	OpsProviderErrorCodeKey    = "ops_provider_error_code"
+	OpsRetryAfterSecondsKey    = "ops_retry_after_seconds"
+	OpsStatusKnownKey          = "ops_status_known"
 
 	// Optional stage latencies (milliseconds) for troubleshooting and alerting.
 	OpsAuthLatencyMsKey      = "ops_auth_latency_ms"
@@ -187,6 +193,74 @@ func setOpsUpstreamError(c *gin.Context, upstreamStatusCode int, upstreamMessage
 	}
 }
 
+// SetOpsFailurePolicy stores bounded classifier output for the request-level
+// Ops row and lets appendOpsUpstreamError copy the same values into attempt JSON.
+func SetOpsFailurePolicy(c *gin.Context, policy GatewayFailurePolicy) {
+	if c == nil {
+		return
+	}
+	c.Set(OpsFailurePolicyKey, policy)
+	c.Set(OpsNetworkErrorTypeKey, policy.NetworkType)
+	c.Set(OpsProviderErrorTypeKey, policy.ProviderType)
+	c.Set(OpsProviderErrorCodeKey, policy.ProviderCode)
+	c.Set(OpsRetryAfterSecondsKey, policy.RetryAfterSeconds)
+	c.Set(OpsStatusKnownKey, policy.StatusKnown)
+}
+
+// EnrichUpstreamFailoverError applies the request-scoped policy to a legacy
+// failover error created by a protocol adapter that still owns its response
+// mapping. The legacy retry flag remains authoritative when set explicitly.
+func EnrichUpstreamFailoverError(c *gin.Context, err *UpstreamFailoverError) {
+	if c == nil || err == nil {
+		return
+	}
+	value, ok := c.Get(OpsFailurePolicyKey)
+	policy, ok := value.(GatewayFailurePolicy)
+	if !ok {
+		return
+	}
+	legacySameAccount := err.RetryableOnSameAccount
+	err.FailureClass = policy.Class
+	err.StatusKnown = policy.StatusKnown
+	err.Persistent = policy.Persistent
+	err.NetworkErrorType = policy.NetworkType
+	err.ProviderErrorType = policy.ProviderType
+	err.ProviderErrorCode = policy.ProviderCode
+	err.RetryAfterSeconds = policy.RetryAfterSeconds
+	err.TextCategory = policy.TextCategory
+	err.TextSignature = policy.TextSignature
+	if legacySameAccount {
+		err.RetryDisposition = GatewayRetrySameThenNext
+		return
+	}
+	err.RetryDisposition = policy.Retry
+	if policy.CanRetryNextAccount() {
+		err.NextAccountAction = NextAccountRetry
+	}
+}
+
+func applyOpsFailurePolicyToEvent(ev *OpsUpstreamErrorEvent, policy GatewayFailurePolicy) {
+	if ev == nil {
+		return
+	}
+	ev.FailureClass = string(policy.Class)
+	ev.RetryDisposition = string(policy.Retry)
+	ev.StatusKnown = policy.StatusKnown
+	ev.ResponseCommitted = policy.ResponseCommitted
+	ev.NetworkErrorType = policy.NetworkType
+	ev.ProviderErrorType = policy.ProviderType
+	ev.ProviderErrorCode = policy.ProviderCode
+	ev.RetryAfterSeconds = policy.RetryAfterSeconds
+	ev.TextCategory = policy.TextCategory
+	ev.TextSignature = policy.TextSignature
+	if ev.Scope == "" {
+		ev.Scope = string(policy.Scope)
+	}
+	if ev.Reason == "" {
+		ev.Reason = string(policy.Class)
+	}
+}
+
 // OpsUpstreamErrorEvent describes one upstream error attempt during a single gateway request.
 // It is stored in ops_error_logs.upstream_errors as a JSON array.
 type OpsUpstreamErrorEvent struct {
@@ -220,6 +294,17 @@ type OpsUpstreamErrorEvent struct {
 	Scope  string `json:"scope,omitempty"`
 	Reason string `json:"reason,omitempty"`
 
+	FailureClass      string `json:"failure_class,omitempty"`
+	RetryDisposition  string `json:"retry_disposition,omitempty"`
+	StatusKnown       bool   `json:"status_known"`
+	ResponseCommitted bool   `json:"response_committed,omitempty"`
+	NetworkErrorType  string `json:"network_error_type,omitempty"`
+	ProviderErrorType string `json:"provider_error_type,omitempty"`
+	ProviderErrorCode string `json:"provider_error_code,omitempty"`
+	RetryAfterSeconds int    `json:"retry_after_seconds,omitempty"`
+	TextCategory      string `json:"text_category,omitempty"`
+	TextSignature     string `json:"text_signature,omitempty"`
+
 	Message string `json:"message,omitempty"`
 	Detail  string `json:"detail,omitempty"`
 }
@@ -238,6 +323,18 @@ func appendOpsUpstreamError(c *gin.Context, ev OpsUpstreamErrorEvent) {
 	ev.Stage = strings.TrimSpace(ev.Stage)
 	ev.Scope = strings.TrimSpace(ev.Scope)
 	ev.Reason = strings.TrimSpace(ev.Reason)
+	ev.FailureClass = strings.TrimSpace(ev.FailureClass)
+	ev.RetryDisposition = strings.TrimSpace(ev.RetryDisposition)
+	ev.NetworkErrorType = strings.TrimSpace(ev.NetworkErrorType)
+	ev.ProviderErrorType = strings.TrimSpace(ev.ProviderErrorType)
+	ev.ProviderErrorCode = strings.TrimSpace(ev.ProviderErrorCode)
+	ev.TextCategory = normalizeGatewayTextCategory(ev.TextCategory)
+	ev.TextSignature = normalizeGatewayTextSignature(ev.TextSignature)
+	if policy, ok := c.Get(OpsFailurePolicyKey); ok {
+		if typed, ok := policy.(GatewayFailurePolicy); ok {
+			applyOpsFailurePolicyToEvent(&ev, typed)
+		}
+	}
 	ev.UpstreamURL = strings.TrimSpace(ev.UpstreamURL)
 	ev.Message = strings.TrimSpace(ev.Message)
 	ev.Detail = strings.TrimSpace(ev.Detail)
