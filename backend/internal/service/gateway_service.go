@@ -873,7 +873,8 @@ func (s *GatewayService) GenerateSessionHash(parsed *ParsedRequest) string {
 		return hash
 	}
 
-	// 3. 最后 fallback: 使用 session上下文 + system + 所有消息的完整摘要串
+	// 3. 最后 fallback: 使用 session 上下文 + 可复用 prompt 前缀；
+	// 无稳定前缀时退回首个 conversation turn，避免把无关请求聚成一个热点。
 	var combined strings.Builder
 	// 混入请求上下文区分因子，避免不同用户相同消息产生相同 hash
 	if parsed.SessionContext != nil {
@@ -888,14 +889,21 @@ func (s *GatewayService) GenerateSessionHash(parsed *ParsedRequest) string {
 		_, _ = combined.WriteString(systemText)
 	}
 	contentStart := combined.Len()
-	appendMessageTextsFromRaw(&combined, parsed.MessagesRaw())
+	hashSource := "message_content_fallback"
+	if usesStableConversationAffinity(parsed.protocol) {
+		if appendStableConversationAffinity(&combined, parsed) {
+			hashSource = "conversation_prefix_fallback"
+		}
+	} else {
+		appendMessageTextsFromRaw(&combined, parsed.MessagesRaw())
+	}
 	if combined.Len() == contentStart {
 		appendResponsesSessionAnchorFromRaw(&combined, parsed.InputRaw())
 	}
 	if combined.Len() > 0 {
 		hash := s.hashContent(combined.String())
 		slog.Info("sticky.hash_source",
-			"source", "message_content_fallback",
+			"source", hashSource,
 			"hash", hash,
 			"content_len", combined.Len(),
 		)
