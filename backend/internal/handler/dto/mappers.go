@@ -245,6 +245,7 @@ func AccountFromServiceShallow(a *service.Account) *Account {
 		LoadFactor:              a.LoadFactor,
 		Priority:                a.Priority,
 		RateMultiplier:          a.BillingRateMultiplier(),
+		UsageBillingMultiplier:  a.EffectiveUsageBillingMultiplier(),
 		Status:                  a.Status,
 		ErrorMessage:            a.ErrorMessage,
 		LastUsedAt:              a.LastUsedAt,
@@ -703,15 +704,16 @@ func UsageLogFromServiceAdmin(l *service.UsageLog) *AdminUsageLog {
 	usageLog := usageLogFromServiceUser(l)
 	usageLog.UpstreamEndpoint = l.UpstreamEndpoint
 	return &AdminUsageLog{
-		UsageLog:              usageLog,
-		UpstreamModel:         l.UpstreamModel,
-		ChannelID:             l.ChannelID,
-		ModelMappingChain:     l.ModelMappingChain,
-		BillingTier:           l.BillingTier,
-		AccountRateMultiplier: l.AccountRateMultiplier,
-		AccountStatsCost:      l.AccountStatsCost,
-		IPAddress:             l.IPAddress,
-		Account:               AccountSummaryFromService(l.Account),
+		UsageLog:               usageLog,
+		UpstreamModel:          l.UpstreamModel,
+		ChannelID:              l.ChannelID,
+		ModelMappingChain:      l.ModelMappingChain,
+		BillingTier:            l.BillingTier,
+		UsageBillingMultiplier: l.UsageBillingMultiplier,
+		AccountRateMultiplier:  l.AccountRateMultiplier,
+		AccountStatsCost:       l.AccountStatsCost,
+		IPAddress:              l.IPAddress,
+		Account:                AccountSummaryFromService(l.Account),
 	}
 }
 

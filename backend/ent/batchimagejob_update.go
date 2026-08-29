@@ -418,6 +418,27 @@ func (_u *BatchImageJobUpdate) ClearActualCost() *BatchImageJobUpdate {
 	return _u
 }
 
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (_u *BatchImageJobUpdate) SetUsageBillingMultiplier(v float64) *BatchImageJobUpdate {
+	_u.mutation.ResetUsageBillingMultiplier()
+	_u.mutation.SetUsageBillingMultiplier(v)
+	return _u
+}
+
+// SetNillableUsageBillingMultiplier sets the "usage_billing_multiplier" field if the given value is not nil.
+func (_u *BatchImageJobUpdate) SetNillableUsageBillingMultiplier(v *float64) *BatchImageJobUpdate {
+	if v != nil {
+		_u.SetUsageBillingMultiplier(*v)
+	}
+	return _u
+}
+
+// AddUsageBillingMultiplier adds value to the "usage_billing_multiplier" field.
+func (_u *BatchImageJobUpdate) AddUsageBillingMultiplier(v float64) *BatchImageJobUpdate {
+	_u.mutation.AddUsageBillingMultiplier(v)
+	return _u
+}
+
 // SetCurrency sets the "currency" field.
 func (_u *BatchImageJobUpdate) SetCurrency(v string) *BatchImageJobUpdate {
 	_u.mutation.SetCurrency(v)
@@ -1027,6 +1048,12 @@ func (_u *BatchImageJobUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if _u.mutation.ActualCostCleared() {
 		_spec.ClearField(batchimagejob.FieldActualCost, field.TypeFloat64)
 	}
+	if value, ok := _u.mutation.UsageBillingMultiplier(); ok {
+		_spec.SetField(batchimagejob.FieldUsageBillingMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedUsageBillingMultiplier(); ok {
+		_spec.AddField(batchimagejob.FieldUsageBillingMultiplier, field.TypeFloat64, value)
+	}
 	if value, ok := _u.mutation.Currency(); ok {
 		_spec.SetField(batchimagejob.FieldCurrency, field.TypeString, value)
 	}
@@ -1542,6 +1569,27 @@ func (_u *BatchImageJobUpdateOne) AddActualCost(v float64) *BatchImageJobUpdateO
 // ClearActualCost clears the value of the "actual_cost" field.
 func (_u *BatchImageJobUpdateOne) ClearActualCost() *BatchImageJobUpdateOne {
 	_u.mutation.ClearActualCost()
+	return _u
+}
+
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (_u *BatchImageJobUpdateOne) SetUsageBillingMultiplier(v float64) *BatchImageJobUpdateOne {
+	_u.mutation.ResetUsageBillingMultiplier()
+	_u.mutation.SetUsageBillingMultiplier(v)
+	return _u
+}
+
+// SetNillableUsageBillingMultiplier sets the "usage_billing_multiplier" field if the given value is not nil.
+func (_u *BatchImageJobUpdateOne) SetNillableUsageBillingMultiplier(v *float64) *BatchImageJobUpdateOne {
+	if v != nil {
+		_u.SetUsageBillingMultiplier(*v)
+	}
+	return _u
+}
+
+// AddUsageBillingMultiplier adds value to the "usage_billing_multiplier" field.
+func (_u *BatchImageJobUpdateOne) AddUsageBillingMultiplier(v float64) *BatchImageJobUpdateOne {
+	_u.mutation.AddUsageBillingMultiplier(v)
 	return _u
 }
 
@@ -2183,6 +2231,12 @@ func (_u *BatchImageJobUpdateOne) sqlSave(ctx context.Context) (_node *BatchImag
 	}
 	if _u.mutation.ActualCostCleared() {
 		_spec.ClearField(batchimagejob.FieldActualCost, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.UsageBillingMultiplier(); ok {
+		_spec.SetField(batchimagejob.FieldUsageBillingMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedUsageBillingMultiplier(); ok {
+		_spec.AddField(batchimagejob.FieldUsageBillingMultiplier, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.Currency(); ok {
 		_spec.SetField(batchimagejob.FieldCurrency, field.TypeString, value)

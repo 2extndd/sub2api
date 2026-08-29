@@ -505,6 +505,12 @@ func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]an
 		}
 		account.RateMultiplier = input.RateMultiplier
 	}
+	if err := ValidateUsageBillingMultiplier(input.UsageBillingMultiplier); err != nil {
+		return nil, err
+	}
+	if input.UsageBillingMultiplier != nil {
+		account.UsageBillingMultiplier = input.UsageBillingMultiplier
+	}
 	if input.LoadFactor != nil && *input.LoadFactor > 0 {
 		if *input.LoadFactor > 10000 {
 			return nil, errors.New("load_factor must be <= 10000")
@@ -801,6 +807,12 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		}
 		account.RateMultiplier = input.RateMultiplier
 	}
+	if err := ValidateUsageBillingMultiplier(input.UsageBillingMultiplier); err != nil {
+		return nil, err
+	}
+	if input.UsageBillingMultiplier != nil {
+		account.UsageBillingMultiplier = input.UsageBillingMultiplier
+	}
 	if input.LoadFactor != nil {
 		if *input.LoadFactor <= 0 {
 			account.LoadFactor = nil // 0 或负数表示清除
@@ -854,6 +866,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 			requestedProbeEnabledUpdate,
 			requestedRateSyncEnabledUpdate,
 			input.RateMultiplier,
+			input.UsageBillingMultiplier,
 		); err != nil {
 			return nil, err
 		}
@@ -1046,6 +1059,9 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 		}
 	}
 
+	if err := ValidateUsageBillingMultiplier(input.UsageBillingMultiplier); err != nil {
+		return nil, err
+	}
 	if input.RateMultiplier != nil {
 		if *input.RateMultiplier < 0 {
 			return nil, errors.New("rate_multiplier must be >= 0")
@@ -1109,6 +1125,9 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 	}
 	if input.RateMultiplier != nil {
 		repoUpdates.RateMultiplier = input.RateMultiplier
+	}
+	if input.UsageBillingMultiplier != nil {
+		repoUpdates.UsageBillingMultiplier = input.UsageBillingMultiplier
 	}
 	if input.LoadFactor != nil {
 		if *input.LoadFactor <= 0 {

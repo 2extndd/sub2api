@@ -100,6 +100,11 @@ func (UsageLog) Fields() []ent.Field {
 		field.Float("rate_multiplier").
 			Default(1).
 			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}),
+		field.Float("usage_billing_multiplier").
+			Default(1).
+			Positive().
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}).
+			Comment("Final successful routing account multiplier applied to customer usage billing"),
 		field.Bool("long_context_billing_applied").
 			Default(false).
 			Comment("Whether long-context pricing changed token prices for this request"),

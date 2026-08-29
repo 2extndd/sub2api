@@ -355,6 +355,11 @@
               </span>
             </span>
           </template>
+          <template #cell-usage_billing_multiplier="{ row }">
+            <span class="font-mono text-sm text-gray-700 dark:text-gray-300">
+              {{ formatMultiplier(row.usage_billing_multiplier ?? 1) }}x
+            </span>
+          </template>
           <template #header-upstream_billing_rate="{ column }">
             <div class="flex items-center gap-1">
               <span>{{ column.label }}</span>
@@ -1450,6 +1455,7 @@ const allColumns = computed(() => {
     { key: 'priority', label: t('admin.accounts.columns.priority'), sortable: true },
     { key: 'scheduler_score', label: t('admin.accounts.columns.schedulerScore'), sortable: false },
     { key: 'rate_multiplier', label: t('admin.accounts.columns.billingRateMultiplier'), sortable: true },
+    { key: 'usage_billing_multiplier', label: t('admin.accounts.columns.usageBillingMultiplier'), sortable: false },
     { key: 'upstream_billing_rate', label: t('admin.accounts.columns.upstreamBillingRate'), sortable: true },
     { key: 'last_used_at', label: t('admin.accounts.columns.lastUsed'), sortable: true },
     { key: 'created_at', label: t('admin.accounts.columns.createdAt'), sortable: true },

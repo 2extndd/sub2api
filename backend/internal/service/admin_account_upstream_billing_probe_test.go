@@ -30,6 +30,7 @@ func (r *accountBillingSettingsAdminRepo) UpdateWithAccountBillingSettings(
 	probeEnabled *bool,
 	rateSyncEnabled *bool,
 	rateMultiplier *float64,
+	usageBillingMultiplier *float64,
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -62,6 +63,10 @@ func (r *accountBillingSettingsAdminRepo) UpdateWithAccountBillingSettings(
 	default:
 		updated.RateMultiplier = cloneAccountValuePointer(current.RateMultiplier)
 		r.lastExplicitRate = nil
+	}
+	if usageBillingMultiplier != nil {
+		value := *usageBillingMultiplier
+		updated.UsageBillingMultiplier = &value
 	}
 	r.accounts[account.ID] = &updated
 	r.updateCalls++

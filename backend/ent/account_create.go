@@ -195,6 +195,20 @@ func (_c *AccountCreate) SetNillableRateMultiplier(v *float64) *AccountCreate {
 	return _c
 }
 
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (_c *AccountCreate) SetUsageBillingMultiplier(v float64) *AccountCreate {
+	_c.mutation.SetUsageBillingMultiplier(v)
+	return _c
+}
+
+// SetNillableUsageBillingMultiplier sets the "usage_billing_multiplier" field if the given value is not nil.
+func (_c *AccountCreate) SetNillableUsageBillingMultiplier(v *float64) *AccountCreate {
+	if v != nil {
+		_c.SetUsageBillingMultiplier(*v)
+	}
+	return _c
+}
+
 // SetStatus sets the "status" field.
 func (_c *AccountCreate) SetStatus(v string) *AccountCreate {
 	_c.mutation.SetStatus(v)
@@ -565,6 +579,10 @@ func (_c *AccountCreate) defaults() error {
 		v := account.DefaultRateMultiplier
 		_c.mutation.SetRateMultiplier(v)
 	}
+	if _, ok := _c.mutation.UsageBillingMultiplier(); !ok {
+		v := account.DefaultUsageBillingMultiplier
+		_c.mutation.SetUsageBillingMultiplier(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := account.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -630,6 +648,14 @@ func (_c *AccountCreate) check() error {
 	}
 	if _, ok := _c.mutation.RateMultiplier(); !ok {
 		return &ValidationError{Name: "rate_multiplier", err: errors.New(`ent: missing required field "Account.rate_multiplier"`)}
+	}
+	if _, ok := _c.mutation.UsageBillingMultiplier(); !ok {
+		return &ValidationError{Name: "usage_billing_multiplier", err: errors.New(`ent: missing required field "Account.usage_billing_multiplier"`)}
+	}
+	if v, ok := _c.mutation.UsageBillingMultiplier(); ok {
+		if err := account.UsageBillingMultiplierValidator(v); err != nil {
+			return &ValidationError{Name: "usage_billing_multiplier", err: fmt.Errorf(`ent: validator failed for field "Account.usage_billing_multiplier": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "Account.status"`)}
@@ -740,6 +766,10 @@ func (_c *AccountCreate) createSpec() (*Account, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RateMultiplier(); ok {
 		_spec.SetField(account.FieldRateMultiplier, field.TypeFloat64, value)
 		_node.RateMultiplier = value
+	}
+	if value, ok := _c.mutation.UsageBillingMultiplier(); ok {
+		_spec.SetField(account.FieldUsageBillingMultiplier, field.TypeFloat64, value)
+		_node.UsageBillingMultiplier = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(account.FieldStatus, field.TypeString, value)
@@ -1164,6 +1194,24 @@ func (u *AccountUpsert) UpdateRateMultiplier() *AccountUpsert {
 // AddRateMultiplier adds v to the "rate_multiplier" field.
 func (u *AccountUpsert) AddRateMultiplier(v float64) *AccountUpsert {
 	u.Add(account.FieldRateMultiplier, v)
+	return u
+}
+
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (u *AccountUpsert) SetUsageBillingMultiplier(v float64) *AccountUpsert {
+	u.Set(account.FieldUsageBillingMultiplier, v)
+	return u
+}
+
+// UpdateUsageBillingMultiplier sets the "usage_billing_multiplier" field to the value that was provided on create.
+func (u *AccountUpsert) UpdateUsageBillingMultiplier() *AccountUpsert {
+	u.SetExcluded(account.FieldUsageBillingMultiplier)
+	return u
+}
+
+// AddUsageBillingMultiplier adds v to the "usage_billing_multiplier" field.
+func (u *AccountUpsert) AddUsageBillingMultiplier(v float64) *AccountUpsert {
+	u.Add(account.FieldUsageBillingMultiplier, v)
 	return u
 }
 
@@ -1739,6 +1787,27 @@ func (u *AccountUpsertOne) AddRateMultiplier(v float64) *AccountUpsertOne {
 func (u *AccountUpsertOne) UpdateRateMultiplier() *AccountUpsertOne {
 	return u.Update(func(s *AccountUpsert) {
 		s.UpdateRateMultiplier()
+	})
+}
+
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (u *AccountUpsertOne) SetUsageBillingMultiplier(v float64) *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetUsageBillingMultiplier(v)
+	})
+}
+
+// AddUsageBillingMultiplier adds v to the "usage_billing_multiplier" field.
+func (u *AccountUpsertOne) AddUsageBillingMultiplier(v float64) *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.AddUsageBillingMultiplier(v)
+	})
+}
+
+// UpdateUsageBillingMultiplier sets the "usage_billing_multiplier" field to the value that was provided on create.
+func (u *AccountUpsertOne) UpdateUsageBillingMultiplier() *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateUsageBillingMultiplier()
 	})
 }
 
@@ -2524,6 +2593,27 @@ func (u *AccountUpsertBulk) AddRateMultiplier(v float64) *AccountUpsertBulk {
 func (u *AccountUpsertBulk) UpdateRateMultiplier() *AccountUpsertBulk {
 	return u.Update(func(s *AccountUpsert) {
 		s.UpdateRateMultiplier()
+	})
+}
+
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (u *AccountUpsertBulk) SetUsageBillingMultiplier(v float64) *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetUsageBillingMultiplier(v)
+	})
+}
+
+// AddUsageBillingMultiplier adds v to the "usage_billing_multiplier" field.
+func (u *AccountUpsertBulk) AddUsageBillingMultiplier(v float64) *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.AddUsageBillingMultiplier(v)
+	})
+}
+
+// UpdateUsageBillingMultiplier sets the "usage_billing_multiplier" field to the value that was provided on create.
+func (u *AccountUpsertBulk) UpdateUsageBillingMultiplier() *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateUsageBillingMultiplier()
 	})
 }
 

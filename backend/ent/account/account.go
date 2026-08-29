@@ -46,6 +46,8 @@ const (
 	FieldPriority = "priority"
 	// FieldRateMultiplier holds the string denoting the rate_multiplier field in the database.
 	FieldRateMultiplier = "rate_multiplier"
+	// FieldUsageBillingMultiplier holds the string denoting the usage_billing_multiplier field in the database.
+	FieldUsageBillingMultiplier = "usage_billing_multiplier"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldErrorMessage holds the string denoting the error_message field in the database.
@@ -146,6 +148,7 @@ var Columns = []string{
 	FieldLoadFactor,
 	FieldPriority,
 	FieldRateMultiplier,
+	FieldUsageBillingMultiplier,
 	FieldStatus,
 	FieldErrorMessage,
 	FieldLastUsedAt,
@@ -210,6 +213,10 @@ var (
 	DefaultPriority int
 	// DefaultRateMultiplier holds the default value on creation for the "rate_multiplier" field.
 	DefaultRateMultiplier float64
+	// DefaultUsageBillingMultiplier holds the default value on creation for the "usage_billing_multiplier" field.
+	DefaultUsageBillingMultiplier float64
+	// UsageBillingMultiplierValidator is a validator for the "usage_billing_multiplier" field. It is called by the builders before save.
+	UsageBillingMultiplierValidator func(float64) error
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
@@ -319,6 +326,11 @@ func ByPriority(opts ...sql.OrderTermOption) OrderOption {
 // ByRateMultiplier orders the results by the rate_multiplier field.
 func ByRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRateMultiplier, opts...).ToFunc()
+}
+
+// ByUsageBillingMultiplier orders the results by the usage_billing_multiplier field.
+func ByUsageBillingMultiplier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUsageBillingMultiplier, opts...).ToFunc()
 }
 
 // ByStatus orders the results by the status field.

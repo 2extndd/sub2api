@@ -98,6 +98,7 @@ type BatchImagePricingSnapshot struct {
 	BaseUnitPrice           float64
 	GroupRateMultiplier     float64
 	AccountRateMultiplier   float64
+	UsageBillingMultiplier  float64
 	BatchDiscountMultiplier float64
 	HoldMultiplier          float64
 	BillableUnitPrice       float64
@@ -273,6 +274,7 @@ func (s *BatchImagePublicService) Submit(ctx context.Context, owner BatchImageOw
 		BaseUnitPrice:           pricingSnapshot.BaseUnitPrice,
 		GroupRateMultiplier:     pricingSnapshot.GroupRateMultiplier,
 		AccountRateMultiplier:   pricingSnapshot.AccountRateMultiplier,
+		UsageBillingMultiplier:  pricingSnapshot.UsageBillingMultiplier,
 		BatchDiscountMultiplier: pricingSnapshot.BatchDiscountMultiplier,
 		HoldMultiplier:          pricingSnapshot.HoldMultiplier,
 		BillableUnitPrice:       pricingSnapshot.BillableUnitPrice,
@@ -1064,20 +1066,22 @@ func (s *BatchImagePublicService) resolvePricingSnapshot(ctx context.Context, ow
 		)
 		holdMultiplier = discountMultiplier
 	}
-	accountMultiplier := 1.0
+	accountRateMultiplier := 1.0
 	if account != nil {
-		accountMultiplier = account.BillingRateMultiplier()
+		accountRateMultiplier = account.BillingRateMultiplier()
 	}
-	if accountMultiplier < 0 {
-		accountMultiplier = 0
+	if accountRateMultiplier < 0 {
+		accountRateMultiplier = 0
 	}
-	standardUnitPrice := unit * groupMultiplier * accountMultiplier
+	usageBillingMultiplier := account.EffectiveUsageBillingMultiplier()
+	standardUnitPrice := unit * groupMultiplier * usageBillingMultiplier
 	billableUnitPrice := standardUnitPrice * discountMultiplier
 	holdUnitPrice := standardUnitPrice * holdMultiplier
 	return &BatchImagePricingSnapshot{
 		BaseUnitPrice:           unit,
 		GroupRateMultiplier:     groupMultiplier,
-		AccountRateMultiplier:   accountMultiplier,
+		AccountRateMultiplier:   accountRateMultiplier,
+		UsageBillingMultiplier:  usageBillingMultiplier,
 		BatchDiscountMultiplier: discountMultiplier,
 		HoldMultiplier:          holdMultiplier,
 		BillableUnitPrice:       billableUnitPrice,

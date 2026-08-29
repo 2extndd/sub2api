@@ -6,6 +6,7 @@ import (
 	"errors"
 	"hash/fnv"
 	"log/slog"
+	"math"
 	"reflect"
 	"sort"
 	"strconv"
@@ -33,15 +34,18 @@ type Account struct {
 	Priority                int
 	// RateMultiplier 账号计费倍率（>=0，允许 0 表示该账号计费为 0）。
 	// 使用指针用于兼容旧版本调度缓存（Redis）中缺字段的情况：nil 表示按 1.0 处理。
-	RateMultiplier     *float64
-	LoadFactor         *int // 调度负载因子；nil 表示使用 Concurrency
-	Status             string
-	ErrorMessage       string
-	LastUsedAt         *time.Time
-	ExpiresAt          *time.Time
-	AutoPauseOnExpired bool
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
+	RateMultiplier *float64
+	// UsageBillingMultiplier is applied once to the final customer charge for this routing account.
+	// nil supports scheduler-cache rows written before the field existed.
+	UsageBillingMultiplier *float64
+	LoadFactor             *int // 调度负载因子；nil 表示使用 Concurrency
+	Status                 string
+	ErrorMessage           string
+	LastUsedAt             *time.Time
+	ExpiresAt              *time.Time
+	AutoPauseOnExpired     bool
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
 
 	Schedulable bool
 
@@ -165,6 +169,20 @@ func (a *Account) BillingRateMultiplier() float64 {
 		return 1.0
 	}
 	return *a.RateMultiplier
+}
+
+// EffectiveUsageBillingMultiplier returns the positive account-level customer
+// billing multiplier. Admin writes reject invalid values; legacy cache rows fall
+// back to 1.0 so deployment is behavior-preserving until explicitly configured.
+func (a *Account) EffectiveUsageBillingMultiplier() float64 {
+	if a == nil || a.UsageBillingMultiplier == nil {
+		return 1.0
+	}
+	value := *a.UsageBillingMultiplier
+	if value <= 0 || value > MaxUsageBillingMultiplier || math.IsNaN(value) || math.IsInf(value, 0) {
+		return 1.0
+	}
+	return value
 }
 
 func (a *Account) EffectiveLoadFactor() int {

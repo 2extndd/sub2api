@@ -2304,6 +2304,8 @@ type AccountMutation struct {
 	addpriority                 *int
 	rate_multiplier             *float64
 	addrate_multiplier          *float64
+	usage_billing_multiplier    *float64
+	addusage_billing_multiplier *float64
 	status                      *string
 	error_message               *string
 	last_used_at                *time.Time
@@ -3141,6 +3143,62 @@ func (m *AccountMutation) AddedRateMultiplier() (r float64, exists bool) {
 func (m *AccountMutation) ResetRateMultiplier() {
 	m.rate_multiplier = nil
 	m.addrate_multiplier = nil
+}
+
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (m *AccountMutation) SetUsageBillingMultiplier(f float64) {
+	m.usage_billing_multiplier = &f
+	m.addusage_billing_multiplier = nil
+}
+
+// UsageBillingMultiplier returns the value of the "usage_billing_multiplier" field in the mutation.
+func (m *AccountMutation) UsageBillingMultiplier() (r float64, exists bool) {
+	v := m.usage_billing_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUsageBillingMultiplier returns the old "usage_billing_multiplier" field's value of the Account entity.
+// If the Account object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMutation) OldUsageBillingMultiplier(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUsageBillingMultiplier is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUsageBillingMultiplier requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUsageBillingMultiplier: %w", err)
+	}
+	return oldValue.UsageBillingMultiplier, nil
+}
+
+// AddUsageBillingMultiplier adds f to the "usage_billing_multiplier" field.
+func (m *AccountMutation) AddUsageBillingMultiplier(f float64) {
+	if m.addusage_billing_multiplier != nil {
+		*m.addusage_billing_multiplier += f
+	} else {
+		m.addusage_billing_multiplier = &f
+	}
+}
+
+// AddedUsageBillingMultiplier returns the value that was added to the "usage_billing_multiplier" field in this mutation.
+func (m *AccountMutation) AddedUsageBillingMultiplier() (r float64, exists bool) {
+	v := m.addusage_billing_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUsageBillingMultiplier resets all changes to the "usage_billing_multiplier" field.
+func (m *AccountMutation) ResetUsageBillingMultiplier() {
+	m.usage_billing_multiplier = nil
+	m.addusage_billing_multiplier = nil
 }
 
 // SetStatus sets the "status" field.
@@ -4138,7 +4196,7 @@ func (m *AccountMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AccountMutation) Fields() []string {
-	fields := make([]string, 0, 31)
+	fields := make([]string, 0, 32)
 	if m.created_at != nil {
 		fields = append(fields, account.FieldCreatedAt)
 	}
@@ -4183,6 +4241,9 @@ func (m *AccountMutation) Fields() []string {
 	}
 	if m.rate_multiplier != nil {
 		fields = append(fields, account.FieldRateMultiplier)
+	}
+	if m.usage_billing_multiplier != nil {
+		fields = append(fields, account.FieldUsageBillingMultiplier)
 	}
 	if m.status != nil {
 		fields = append(fields, account.FieldStatus)
@@ -4270,6 +4331,8 @@ func (m *AccountMutation) Field(name string) (ent.Value, bool) {
 		return m.Priority()
 	case account.FieldRateMultiplier:
 		return m.RateMultiplier()
+	case account.FieldUsageBillingMultiplier:
+		return m.UsageBillingMultiplier()
 	case account.FieldStatus:
 		return m.Status()
 	case account.FieldErrorMessage:
@@ -4341,6 +4404,8 @@ func (m *AccountMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldPriority(ctx)
 	case account.FieldRateMultiplier:
 		return m.OldRateMultiplier(ctx)
+	case account.FieldUsageBillingMultiplier:
+		return m.OldUsageBillingMultiplier(ctx)
 	case account.FieldStatus:
 		return m.OldStatus(ctx)
 	case account.FieldErrorMessage:
@@ -4487,6 +4552,13 @@ func (m *AccountMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetRateMultiplier(v)
 		return nil
+	case account.FieldUsageBillingMultiplier:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUsageBillingMultiplier(v)
+		return nil
 	case account.FieldStatus:
 		v, ok := value.(string)
 		if !ok {
@@ -4622,6 +4694,9 @@ func (m *AccountMutation) AddedFields() []string {
 	if m.addrate_multiplier != nil {
 		fields = append(fields, account.FieldRateMultiplier)
 	}
+	if m.addusage_billing_multiplier != nil {
+		fields = append(fields, account.FieldUsageBillingMultiplier)
+	}
 	return fields
 }
 
@@ -4640,6 +4715,8 @@ func (m *AccountMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedPriority()
 	case account.FieldRateMultiplier:
 		return m.AddedRateMultiplier()
+	case account.FieldUsageBillingMultiplier:
+		return m.AddedUsageBillingMultiplier()
 	}
 	return nil, false
 }
@@ -4683,6 +4760,13 @@ func (m *AccountMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddRateMultiplier(v)
+		return nil
+	case account.FieldUsageBillingMultiplier:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUsageBillingMultiplier(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Account numeric field %s", name)
@@ -4860,6 +4944,9 @@ func (m *AccountMutation) ResetField(name string) error {
 		return nil
 	case account.FieldRateMultiplier:
 		m.ResetRateMultiplier()
+		return nil
+	case account.FieldUsageBillingMultiplier:
+		m.ResetUsageBillingMultiplier()
 		return nil
 	case account.FieldStatus:
 		m.ResetStatus()
@@ -11307,65 +11394,67 @@ func (m *BatchImageItemMutation) ResetEdge(name string) error {
 // BatchImageJobMutation represents an operation that mutates the BatchImageJob nodes in the graph.
 type BatchImageJobMutation struct {
 	config
-	op                  Op
-	typ                 string
-	id                  *int64
-	batch_id            *string
-	user_id             *int64
-	adduser_id          *int64
-	api_key_id          *int64
-	addapi_key_id       *int64
-	account_id          *int64
-	addaccount_id       *int64
-	provider            *string
-	model               *string
-	task_name           *string
-	status              *string
-	provider_job_name   *string
-	provider_input_ref  *string
-	provider_output_ref *string
-	gcs_input_uri       *string
-	gcs_output_uri      *string
-	item_count          *int
-	additem_count       *int
-	success_count       *int
-	addsuccess_count    *int
-	fail_count          *int
-	addfail_count       *int
-	cancelled_count     *int
-	addcancelled_count  *int
-	estimated_cost      *float64
-	addestimated_cost   *float64
-	hold_amount         *float64
-	addhold_amount      *float64
-	actual_cost         *float64
-	addactual_cost      *float64
-	currency            *string
-	hold_id             *string
-	idempotency_key     *string
-	request_hash        *string
-	manifest_hash       *string
-	retry_count         *int
-	addretry_count      *int
-	version             *int
-	addversion          *int
-	output_expires_at   *time.Time
-	input_deleted_at    *time.Time
-	output_deleted_at   *time.Time
-	downloaded_at       *time.Time
-	user_deleted_at     *time.Time
-	last_error_code     *string
-	last_error_message  *string
-	created_at          *time.Time
-	updated_at          *time.Time
-	submitted_at        *time.Time
-	started_at          *time.Time
-	finished_at         *time.Time
-	settled_at          *time.Time
-	clearedFields       map[string]struct{}
-	done                bool
-	oldValue            func(context.Context) (*BatchImageJob, error)
-	predicates          []predicate.BatchImageJob
+	op                          Op
+	typ                         string
+	id                          *int64
+	batch_id                    *string
+	user_id                     *int64
+	adduser_id                  *int64
+	api_key_id                  *int64
+	addapi_key_id               *int64
+	account_id                  *int64
+	addaccount_id               *int64
+	provider                    *string
+	model                       *string
+	task_name                   *string
+	status                      *string
+	provider_job_name           *string
+	provider_input_ref          *string
+	provider_output_ref         *string
+	gcs_input_uri               *string
+	gcs_output_uri              *string
+	item_count                  *int
+	additem_count               *int
+	success_count               *int
+	addsuccess_count            *int
+	fail_count                  *int
+	addfail_count               *int
+	cancelled_count             *int
+	addcancelled_count          *int
+	estimated_cost              *float64
+	addestimated_cost           *float64
+	hold_amount                 *float64
+	addhold_amount              *float64
+	actual_cost                 *float64
+	addactual_cost              *float64
+	usage_billing_multiplier    *float64
+	addusage_billing_multiplier *float64
+	currency                    *string
+	hold_id                     *string
+	idempotency_key             *string
+	request_hash                *string
+	manifest_hash               *string
+	retry_count                 *int
+	addretry_count              *int
+	version                     *int
+	addversion                  *int
+	output_expires_at           *time.Time
+	input_deleted_at            *time.Time
+	output_deleted_at           *time.Time
+	downloaded_at               *time.Time
+	user_deleted_at             *time.Time
+	last_error_code             *string
+	last_error_message          *string
+	created_at                  *time.Time
+	updated_at                  *time.Time
+	submitted_at                *time.Time
+	started_at                  *time.Time
+	finished_at                 *time.Time
+	settled_at                  *time.Time
+	clearedFields               map[string]struct{}
+	done                        bool
+	oldValue                    func(context.Context) (*BatchImageJob, error)
+	predicates                  []predicate.BatchImageJob
 }
 
 var _ ent.Mutation = (*BatchImageJobMutation)(nil)
@@ -12507,6 +12596,62 @@ func (m *BatchImageJobMutation) ResetActualCost() {
 	delete(m.clearedFields, batchimagejob.FieldActualCost)
 }
 
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (m *BatchImageJobMutation) SetUsageBillingMultiplier(f float64) {
+	m.usage_billing_multiplier = &f
+	m.addusage_billing_multiplier = nil
+}
+
+// UsageBillingMultiplier returns the value of the "usage_billing_multiplier" field in the mutation.
+func (m *BatchImageJobMutation) UsageBillingMultiplier() (r float64, exists bool) {
+	v := m.usage_billing_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUsageBillingMultiplier returns the old "usage_billing_multiplier" field's value of the BatchImageJob entity.
+// If the BatchImageJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BatchImageJobMutation) OldUsageBillingMultiplier(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUsageBillingMultiplier is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUsageBillingMultiplier requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUsageBillingMultiplier: %w", err)
+	}
+	return oldValue.UsageBillingMultiplier, nil
+}
+
+// AddUsageBillingMultiplier adds f to the "usage_billing_multiplier" field.
+func (m *BatchImageJobMutation) AddUsageBillingMultiplier(f float64) {
+	if m.addusage_billing_multiplier != nil {
+		*m.addusage_billing_multiplier += f
+	} else {
+		m.addusage_billing_multiplier = &f
+	}
+}
+
+// AddedUsageBillingMultiplier returns the value that was added to the "usage_billing_multiplier" field in this mutation.
+func (m *BatchImageJobMutation) AddedUsageBillingMultiplier() (r float64, exists bool) {
+	v := m.addusage_billing_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUsageBillingMultiplier resets all changes to the "usage_billing_multiplier" field.
+func (m *BatchImageJobMutation) ResetUsageBillingMultiplier() {
+	m.usage_billing_multiplier = nil
+	m.addusage_billing_multiplier = nil
+}
+
 // SetCurrency sets the "currency" field.
 func (m *BatchImageJobMutation) SetCurrency(s string) {
 	m.currency = &s
@@ -13496,7 +13641,7 @@ func (m *BatchImageJobMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *BatchImageJobMutation) Fields() []string {
-	fields := make([]string, 0, 40)
+	fields := make([]string, 0, 41)
 	if m.batch_id != nil {
 		fields = append(fields, batchimagejob.FieldBatchID)
 	}
@@ -13556,6 +13701,9 @@ func (m *BatchImageJobMutation) Fields() []string {
 	}
 	if m.actual_cost != nil {
 		fields = append(fields, batchimagejob.FieldActualCost)
+	}
+	if m.usage_billing_multiplier != nil {
+		fields = append(fields, batchimagejob.FieldUsageBillingMultiplier)
 	}
 	if m.currency != nil {
 		fields = append(fields, batchimagejob.FieldCurrency)
@@ -13665,6 +13813,8 @@ func (m *BatchImageJobMutation) Field(name string) (ent.Value, bool) {
 		return m.HoldAmount()
 	case batchimagejob.FieldActualCost:
 		return m.ActualCost()
+	case batchimagejob.FieldUsageBillingMultiplier:
+		return m.UsageBillingMultiplier()
 	case batchimagejob.FieldCurrency:
 		return m.Currency()
 	case batchimagejob.FieldHoldID:
@@ -13754,6 +13904,8 @@ func (m *BatchImageJobMutation) OldField(ctx context.Context, name string) (ent.
 		return m.OldHoldAmount(ctx)
 	case batchimagejob.FieldActualCost:
 		return m.OldActualCost(ctx)
+	case batchimagejob.FieldUsageBillingMultiplier:
+		return m.OldUsageBillingMultiplier(ctx)
 	case batchimagejob.FieldCurrency:
 		return m.OldCurrency(ctx)
 	case batchimagejob.FieldHoldID:
@@ -13943,6 +14095,13 @@ func (m *BatchImageJobMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetActualCost(v)
 		return nil
+	case batchimagejob.FieldUsageBillingMultiplier:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUsageBillingMultiplier(v)
+		return nil
 	case batchimagejob.FieldCurrency:
 		v, ok := value.(string)
 		if !ok {
@@ -14121,6 +14280,9 @@ func (m *BatchImageJobMutation) AddedFields() []string {
 	if m.addactual_cost != nil {
 		fields = append(fields, batchimagejob.FieldActualCost)
 	}
+	if m.addusage_billing_multiplier != nil {
+		fields = append(fields, batchimagejob.FieldUsageBillingMultiplier)
+	}
 	if m.addretry_count != nil {
 		fields = append(fields, batchimagejob.FieldRetryCount)
 	}
@@ -14155,6 +14317,8 @@ func (m *BatchImageJobMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedHoldAmount()
 	case batchimagejob.FieldActualCost:
 		return m.AddedActualCost()
+	case batchimagejob.FieldUsageBillingMultiplier:
+		return m.AddedUsageBillingMultiplier()
 	case batchimagejob.FieldRetryCount:
 		return m.AddedRetryCount()
 	case batchimagejob.FieldVersion:
@@ -14237,6 +14401,13 @@ func (m *BatchImageJobMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddActualCost(v)
+		return nil
+	case batchimagejob.FieldUsageBillingMultiplier:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUsageBillingMultiplier(v)
 		return nil
 	case batchimagejob.FieldRetryCount:
 		v, ok := value.(int)
@@ -14485,6 +14656,9 @@ func (m *BatchImageJobMutation) ResetField(name string) error {
 		return nil
 	case batchimagejob.FieldActualCost:
 		m.ResetActualCost()
+		return nil
+	case batchimagejob.FieldUsageBillingMultiplier:
+		m.ResetUsageBillingMultiplier()
 		return nil
 	case batchimagejob.FieldCurrency:
 		m.ResetCurrency()
@@ -43387,6 +43561,8 @@ type UsageLogMutation struct {
 	addactual_cost               *float64
 	rate_multiplier              *float64
 	addrate_multiplier           *float64
+	usage_billing_multiplier     *float64
+	addusage_billing_multiplier  *float64
 	long_context_billing_applied *bool
 	account_rate_multiplier      *float64
 	addaccount_rate_multiplier   *float64
@@ -44848,6 +45024,62 @@ func (m *UsageLogMutation) ResetRateMultiplier() {
 	m.addrate_multiplier = nil
 }
 
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (m *UsageLogMutation) SetUsageBillingMultiplier(f float64) {
+	m.usage_billing_multiplier = &f
+	m.addusage_billing_multiplier = nil
+}
+
+// UsageBillingMultiplier returns the value of the "usage_billing_multiplier" field in the mutation.
+func (m *UsageLogMutation) UsageBillingMultiplier() (r float64, exists bool) {
+	v := m.usage_billing_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUsageBillingMultiplier returns the old "usage_billing_multiplier" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldUsageBillingMultiplier(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUsageBillingMultiplier is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUsageBillingMultiplier requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUsageBillingMultiplier: %w", err)
+	}
+	return oldValue.UsageBillingMultiplier, nil
+}
+
+// AddUsageBillingMultiplier adds f to the "usage_billing_multiplier" field.
+func (m *UsageLogMutation) AddUsageBillingMultiplier(f float64) {
+	if m.addusage_billing_multiplier != nil {
+		*m.addusage_billing_multiplier += f
+	} else {
+		m.addusage_billing_multiplier = &f
+	}
+}
+
+// AddedUsageBillingMultiplier returns the value that was added to the "usage_billing_multiplier" field in this mutation.
+func (m *UsageLogMutation) AddedUsageBillingMultiplier() (r float64, exists bool) {
+	v := m.addusage_billing_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUsageBillingMultiplier resets all changes to the "usage_billing_multiplier" field.
+func (m *UsageLogMutation) ResetUsageBillingMultiplier() {
+	m.usage_billing_multiplier = nil
+	m.addusage_billing_multiplier = nil
+}
+
 // SetLongContextBillingApplied sets the "long_context_billing_applied" field.
 func (m *UsageLogMutation) SetLongContextBillingApplied(b bool) {
 	m.long_context_billing_applied = &b
@@ -46001,7 +46233,7 @@ func (m *UsageLogMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UsageLogMutation) Fields() []string {
-	fields := make([]string, 0, 45)
+	fields := make([]string, 0, 46)
 	if m.user != nil {
 		fields = append(fields, usagelog.FieldUserID)
 	}
@@ -46079,6 +46311,9 @@ func (m *UsageLogMutation) Fields() []string {
 	}
 	if m.rate_multiplier != nil {
 		fields = append(fields, usagelog.FieldRateMultiplier)
+	}
+	if m.usage_billing_multiplier != nil {
+		fields = append(fields, usagelog.FieldUsageBillingMultiplier)
 	}
 	if m.long_context_billing_applied != nil {
 		fields = append(fields, usagelog.FieldLongContextBillingApplied)
@@ -46197,6 +46432,8 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
 		return m.ActualCost()
 	case usagelog.FieldRateMultiplier:
 		return m.RateMultiplier()
+	case usagelog.FieldUsageBillingMultiplier:
+		return m.UsageBillingMultiplier()
 	case usagelog.FieldLongContextBillingApplied:
 		return m.LongContextBillingApplied()
 	case usagelog.FieldAccountRateMultiplier:
@@ -46296,6 +46533,8 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldActualCost(ctx)
 	case usagelog.FieldRateMultiplier:
 		return m.OldRateMultiplier(ctx)
+	case usagelog.FieldUsageBillingMultiplier:
+		return m.OldUsageBillingMultiplier(ctx)
 	case usagelog.FieldLongContextBillingApplied:
 		return m.OldLongContextBillingApplied(ctx)
 	case usagelog.FieldAccountRateMultiplier:
@@ -46525,6 +46764,13 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetRateMultiplier(v)
 		return nil
+	case usagelog.FieldUsageBillingMultiplier:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUsageBillingMultiplier(v)
+		return nil
 	case usagelog.FieldLongContextBillingApplied:
 		v, ok := value.(bool)
 		if !ok {
@@ -46708,6 +46954,9 @@ func (m *UsageLogMutation) AddedFields() []string {
 	if m.addrate_multiplier != nil {
 		fields = append(fields, usagelog.FieldRateMultiplier)
 	}
+	if m.addusage_billing_multiplier != nil {
+		fields = append(fields, usagelog.FieldUsageBillingMultiplier)
+	}
 	if m.addaccount_rate_multiplier != nil {
 		fields = append(fields, usagelog.FieldAccountRateMultiplier)
 	}
@@ -46765,6 +47014,8 @@ func (m *UsageLogMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedActualCost()
 	case usagelog.FieldRateMultiplier:
 		return m.AddedRateMultiplier()
+	case usagelog.FieldUsageBillingMultiplier:
+		return m.AddedUsageBillingMultiplier()
 	case usagelog.FieldAccountRateMultiplier:
 		return m.AddedAccountRateMultiplier()
 	case usagelog.FieldBillingType:
@@ -46885,6 +47136,13 @@ func (m *UsageLogMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddRateMultiplier(v)
+		return nil
+	case usagelog.FieldUsageBillingMultiplier:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUsageBillingMultiplier(v)
 		return nil
 	case usagelog.FieldAccountRateMultiplier:
 		v, ok := value.(float64)
@@ -47162,6 +47420,9 @@ func (m *UsageLogMutation) ResetField(name string) error {
 		return nil
 	case usagelog.FieldRateMultiplier:
 		m.ResetRateMultiplier()
+		return nil
+	case usagelog.FieldUsageBillingMultiplier:
+		m.ResetUsageBillingMultiplier()
 		return nil
 	case usagelog.FieldLongContextBillingApplied:
 		m.ResetLongContextBillingApplied()

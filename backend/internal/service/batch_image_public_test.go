@@ -59,6 +59,7 @@ func TestBatchImagePublicService_Submit(t *testing.T) {
 		require.InDelta(t, 0.25, job.BaseUnitPrice, 1e-12)
 		require.InDelta(t, 1.0, job.GroupRateMultiplier, 1e-12)
 		require.InDelta(t, 1.0, job.AccountRateMultiplier, 1e-12)
+		require.InDelta(t, 1.0, job.UsageBillingMultiplier, 1e-12)
 		require.InDelta(t, 0.5, job.BatchDiscountMultiplier, 1e-12)
 		require.InDelta(t, 0.6, job.HoldMultiplier, 1e-12)
 		require.InDelta(t, 0.125, job.BillableUnitPrice, 1e-12)
@@ -66,12 +67,14 @@ func TestBatchImagePublicService_Submit(t *testing.T) {
 		require.Equal(t, "batch-session-123", batchImageDerefString(job.SessionID))
 	})
 
-	t.Run("combines user group image rate account rate discount and hold margin", func(t *testing.T) {
+	t.Run("uses customer multiplier but keeps account cost multiplier separate", func(t *testing.T) {
 		svc, repo, _, _, _ := newTestBatchImagePublicService(true)
 		groupID := int64(7)
-		accountMultiplier := 1.25
+		accountRateMultiplier := 1.25
+		usageBillingMultiplier := 2.0
 		accountRepo := svc.AccountRepo.(*publicBatchImageAccountRepo)
-		accountRepo.accounts[1].RateMultiplier = &accountMultiplier
+		accountRepo.accounts[1].RateMultiplier = &accountRateMultiplier
+		accountRepo.accounts[1].UsageBillingMultiplier = &usageBillingMultiplier
 		svc.GroupRepo = &publicBatchImageGroupRepo{groups: map[int64]*Group{
 			groupID: {
 				ID:                           groupID,
@@ -89,19 +92,20 @@ func TestBatchImagePublicService_Submit(t *testing.T) {
 
 		got, err := svc.Submit(ctx, BatchImageOwner{UserID: 11, APIKeyID: 22, GroupID: &groupID}, validBatchImageSubmitRequest(), "")
 		require.NoError(t, err)
-		require.InDelta(t, 0.25, got.EstimatedCost, 1e-12)
+		require.InDelta(t, 0.4, got.EstimatedCost, 1e-12)
 
 		job := repo.jobs[got.ID]
 		require.InDelta(t, 0.25, job.BaseUnitPrice, 1e-12)
 		require.InDelta(t, 0.5, job.GroupRateMultiplier, 1e-12)
 		require.InDelta(t, 1.25, job.AccountRateMultiplier, 1e-12)
+		require.InDelta(t, 2.0, job.UsageBillingMultiplier, 1e-12)
 		require.InDelta(t, 0.8, job.BatchDiscountMultiplier, 1e-12)
 		// 配置的 hold(0.6) < discount(0.8) 属于会导致结算死锁的脏数据，
 		// 快照时被钳制为 discount，保证 holdAmount >= 实际成本上限。
 		require.InDelta(t, 0.8, job.HoldMultiplier, 1e-12)
-		require.InDelta(t, 0.125, job.BillableUnitPrice, 1e-12)
-		require.InDelta(t, 0.125, job.HoldUnitPrice, 1e-12)
-		require.InDelta(t, 0.25, *job.HoldAmount, 1e-12)
+		require.InDelta(t, 0.2, job.BillableUnitPrice, 1e-12)
+		require.InDelta(t, 0.2, job.HoldUnitPrice, 1e-12)
+		require.InDelta(t, 0.4, *job.HoldAmount, 1e-12)
 	})
 
 	t.Run("uses configured group 1k image price for batch image base price", func(t *testing.T) {

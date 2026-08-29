@@ -759,6 +759,38 @@
             <span>{{ t('admin.accounts.bulkEdit.rateSyncWarning') }}</span>
           </p>
         </div>
+
+        <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+          <div class="mb-3 flex items-center justify-between">
+            <label
+              id="bulk-edit-usage-billing-multiplier-label"
+              class="input-label mb-0"
+              for="bulk-edit-usage-billing-multiplier-enabled"
+            >
+              {{ t('admin.accounts.usageBillingMultiplier') }}
+            </label>
+            <input
+              v-model="enableUsageBillingMultiplier"
+              id="bulk-edit-usage-billing-multiplier-enabled"
+              type="checkbox"
+              aria-controls="bulk-edit-usage-billing-multiplier"
+              class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+          </div>
+          <input
+            v-model.number="usageBillingMultiplier"
+            id="bulk-edit-usage-billing-multiplier"
+            type="number"
+            min="0.0000000001"
+            max="1000000"
+            step="0.000001"
+            :disabled="!enableUsageBillingMultiplier"
+            class="input"
+            :class="!enableUsageBillingMultiplier && 'cursor-not-allowed opacity-50'"
+            aria-labelledby="bulk-edit-usage-billing-multiplier-label"
+          />
+          <p class="input-hint">{{ t('admin.accounts.usageBillingMultiplierHint') }}</p>
+        </div>
       </div>
 
       <!-- Status -->
@@ -1473,6 +1505,7 @@ const enableConcurrency = ref(false)
 const enableLoadFactor = ref(false)
 const enablePriority = ref(false)
 const enableRateMultiplier = ref(false)
+const enableUsageBillingMultiplier = ref(false)
 const enableStatus = ref(false)
 const enableGroups = ref(false)
 const enableOpenAIPassthrough = ref(false)
@@ -1505,6 +1538,7 @@ const concurrency = ref(1)
 const loadFactor = ref<number | null>(null)
 const priority = ref(1)
 const rateMultiplier = ref(1)
+const usageBillingMultiplier = ref(1)
 const status = ref<'active' | 'inactive'>('active')
 const groupIds = ref<number[]>([])
 const openaiPassthroughEnabled = ref(false)
@@ -1693,6 +1727,10 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
 
   if (enableRateMultiplier.value) {
     updates.rate_multiplier = rateMultiplier.value
+  }
+
+  if (enableUsageBillingMultiplier.value) {
+    updates.usage_billing_multiplier = usageBillingMultiplier.value
   }
 
   if (enableStatus.value) {
@@ -1903,6 +1941,7 @@ const handleSubmit = async () => {
     enableLoadFactor.value ||
     enablePriority.value ||
     enableRateMultiplier.value ||
+    enableUsageBillingMultiplier.value ||
     enableStatus.value ||
     enableGroups.value ||
     enableOpenAIWSMode.value ||
@@ -1917,6 +1956,15 @@ const handleSubmit = async () => {
 
   if (!hasAnyFieldEnabled) {
     appStore.showError(t('admin.accounts.bulkEdit.noFieldsSelected'))
+    return
+  }
+  if (
+    enableUsageBillingMultiplier.value &&
+    (!Number.isFinite(usageBillingMultiplier.value) ||
+      usageBillingMultiplier.value <= 0 ||
+      usageBillingMultiplier.value > 1_000_000)
+  ) {
+    appStore.showError(t('admin.accounts.usageBillingMultiplierInvalid'))
     return
   }
 
@@ -2035,6 +2083,7 @@ watch(
       enableLoadFactor.value = false
       enablePriority.value = false
       enableRateMultiplier.value = false
+      enableUsageBillingMultiplier.value = false
       enableStatus.value = false
       enableGroups.value = false
       enableOpenAIPassthrough.value = false
@@ -2065,6 +2114,7 @@ watch(
       loadFactor.value = null
       priority.value = 1
       rateMultiplier.value = 1
+      usageBillingMultiplier.value = 1
       status.value = 'active'
       groupIds.value = []
       openaiOAuthResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF

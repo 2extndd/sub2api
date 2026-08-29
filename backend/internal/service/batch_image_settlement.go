@@ -255,30 +255,39 @@ func (s *BatchImageSettlementService) recordUsageLog(ctx context.Context, job *B
 	}
 	billingMode := string(BillingModeImage)
 	accountRateMultiplier := job.AccountRateMultiplier
+	usageBillingMultiplier := job.UsageBillingMultiplier
+	if err := ValidateUsageBillingMultiplier(&usageBillingMultiplier); err != nil {
+		usageBillingMultiplier = 1.0
+	}
+	baseCost := actualCost
+	if job.PricingSnapshotVersion >= 1 && job.BaseUnitPrice >= 0 {
+		baseCost = float64(job.SuccessCount) * job.BaseUnitPrice
+	}
 	inboundEndpoint := "/v1/images/batches"
 	upstreamEndpoint := "vertex:batchPredictionJobs"
 	imageSize := "1K"
 	usageLog := &UsageLog{
-		UserID:                job.UserID,
-		APIKeyID:              *job.APIKeyID,
-		AccountID:             *job.AccountID,
-		RequestID:             strings.TrimSpace(requestID),
-		Model:                 job.Model,
-		RequestedModel:        job.Model,
-		InboundEndpoint:       &inboundEndpoint,
-		UpstreamEndpoint:      &upstreamEndpoint,
-		ImageCount:            job.SuccessCount,
-		ImageOutputCost:       actualCost,
-		TotalCost:             actualCost,
-		ActualCost:            actualCost,
-		RateMultiplier:        job.GroupRateMultiplier * job.BatchDiscountMultiplier,
-		AccountRateMultiplier: &accountRateMultiplier,
-		BillingType:           BillingTypeBalance,
-		RequestType:           RequestTypeSync,
-		BillingMode:           &billingMode,
-		ImageSize:             &imageSize,
-		SessionID:             job.SessionID,
-		CreatedAt:             createdAt,
+		UserID:                 job.UserID,
+		APIKeyID:               *job.APIKeyID,
+		AccountID:              *job.AccountID,
+		RequestID:              strings.TrimSpace(requestID),
+		Model:                  job.Model,
+		RequestedModel:         job.Model,
+		InboundEndpoint:        &inboundEndpoint,
+		UpstreamEndpoint:       &upstreamEndpoint,
+		ImageCount:             job.SuccessCount,
+		ImageOutputCost:        baseCost,
+		TotalCost:              baseCost,
+		ActualCost:             actualCost,
+		RateMultiplier:         job.GroupRateMultiplier * job.BatchDiscountMultiplier,
+		UsageBillingMultiplier: &usageBillingMultiplier,
+		AccountRateMultiplier:  &accountRateMultiplier,
+		BillingType:            BillingTypeBalance,
+		RequestType:            RequestTypeSync,
+		BillingMode:            &billingMode,
+		ImageSize:              &imageSize,
+		SessionID:              job.SessionID,
+		CreatedAt:              createdAt,
 	}
 	writeUsageLogBestEffort(ctx, s.UsageLogRepo, usageLog, "service.batch_image_settlement")
 }

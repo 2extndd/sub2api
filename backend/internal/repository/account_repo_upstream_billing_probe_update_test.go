@@ -3,7 +3,9 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -361,6 +363,58 @@ func TestUpdateCredentialsAtomicallyClearsProbeForOpenAIAPIKeyIdentityChange(t *
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestGenericAccountUpdatePreservesUsageBillingMultiplier(t *testing.T) {
+	matcher := sqlmock.QueryMatcherFunc(func(expectedSQL, actualSQL string) error {
+		if expectedSQL == "UPDATE_WITHOUT_USAGE_BILLING_MULTIPLIER" {
+			if !strings.Contains(actualSQL, "UPDATE") || !strings.Contains(actualSQL, "accounts") {
+				return fmt.Errorf("expected account UPDATE, got %s", actualSQL)
+			}
+			if strings.Contains(actualSQL, "usage_billing_multiplier") {
+				return fmt.Errorf("generic update must preserve usage_billing_multiplier: %s", actualSQL)
+			}
+			return nil
+		}
+		return sqlmock.QueryMatcherRegexp.Match(expectedSQL, actualSQL)
+	})
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(matcher))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
+	t.Cleanup(func() { _ = client.Close() })
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`(?s)`+regexp.QuoteMeta("SELECT")+`.*`+regexp.QuoteMeta("FOR NO KEY UPDATE")).
+		WithArgs(int64(27), service.PlatformOpenAI, service.AccountTypeAPIKey, `{"api_key":"sk-test"}`, nil).
+		WillReturnRows(sqlmock.NewRows([]string{"identity_unchanged", "ollama_group_unchanged", "ollama_proxy_unchanged", "enabled", "rate_sync_enabled", "snapshot", "ollama_session", "ollama_auto", "ollama_snapshot"}).
+			AddRow(true, false, true, nil, nil, nil, nil, nil, nil))
+	mock.ExpectExec("UPDATE_WITHOUT_USAGE_BILLING_MULTIPLIER").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery(`(?s)SELECT .* FROM "accounts" WHERE "id" = \$1`).
+		WithArgs(int64(27)).
+		WillReturnRows(updatedAccountRows(27, `{}`))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO scheduler_outbox")).WillReturnError(errors.New("outbox failed"))
+	mock.ExpectRollback()
+
+	staleMultiplier := 2.0
+	repo := newAccountRepositoryWithSQL(client, db, nil)
+	account := &service.Account{
+		ID:                     27,
+		Name:                   "test",
+		Platform:               service.PlatformOpenAI,
+		Type:                   service.AccountTypeAPIKey,
+		Credentials:            map[string]any{"api_key": "sk-test"},
+		Extra:                  map[string]any{},
+		Concurrency:            1,
+		Priority:               1,
+		Status:                 service.StatusActive,
+		Schedulable:            true,
+		UsageBillingMultiplier: &staleMultiplier,
+	}
+
+	err = repo.Update(context.Background(), account)
+	require.EqualError(t, err, "outbox failed")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestUpdateWithAccountBillingSettingsRollsBackWhenOutboxFails(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -398,7 +452,7 @@ func TestUpdateWithAccountBillingSettingsRollsBackWhenOutboxFails(t *testing.T) 
 	}
 
 	probeDisabled := false
-	err = repo.UpdateWithAccountBillingSettings(context.Background(), account, &probeDisabled, nil, nil)
+	err = repo.UpdateWithAccountBillingSettings(context.Background(), account, &probeDisabled, nil, nil, nil)
 
 	require.EqualError(t, err, "outbox failed")
 	require.Equal(t, false, account.Extra[service.UpstreamBillingProbeEnabledExtraKey])
@@ -476,7 +530,7 @@ func updatedAccountRows(id int64, extra string) *sqlmock.Rows {
 	now := time.Now()
 	return sqlmock.NewRows(dbaccount.Columns).AddRow(
 		id, now, now, nil, "test", nil, service.PlatformOpenAI, service.AccountTypeAPIKey,
-		[]byte(`{"api_key":"sk-test"}`), []byte(extra), nil, nil, 1, nil, 1, 1.0,
+		[]byte(`{"api_key":"sk-test"}`), []byte(extra), nil, nil, 1, nil, 1, 1.0, 1.0,
 		service.StatusActive, nil, nil, nil, false, true, nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, service.QuotaDimensionGlobal,
 	)

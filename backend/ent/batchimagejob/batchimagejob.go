@@ -53,6 +53,8 @@ const (
 	FieldHoldAmount = "hold_amount"
 	// FieldActualCost holds the string denoting the actual_cost field in the database.
 	FieldActualCost = "actual_cost"
+	// FieldUsageBillingMultiplier holds the string denoting the usage_billing_multiplier field in the database.
+	FieldUsageBillingMultiplier = "usage_billing_multiplier"
 	// FieldCurrency holds the string denoting the currency field in the database.
 	FieldCurrency = "currency"
 	// FieldHoldID holds the string denoting the hold_id field in the database.
@@ -120,6 +122,7 @@ var Columns = []string{
 	FieldEstimatedCost,
 	FieldHoldAmount,
 	FieldActualCost,
+	FieldUsageBillingMultiplier,
 	FieldCurrency,
 	FieldHoldID,
 	FieldIdempotencyKey,
@@ -185,6 +188,8 @@ var (
 	DefaultCancelledCount int
 	// DefaultEstimatedCost holds the default value on creation for the "estimated_cost" field.
 	DefaultEstimatedCost float64
+	// DefaultUsageBillingMultiplier holds the default value on creation for the "usage_billing_multiplier" field.
+	DefaultUsageBillingMultiplier float64
 	// DefaultCurrency holds the default value on creation for the "currency" field.
 	DefaultCurrency string
 	// CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
@@ -317,6 +322,11 @@ func ByHoldAmount(opts ...sql.OrderTermOption) OrderOption {
 // ByActualCost orders the results by the actual_cost field.
 func ByActualCost(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldActualCost, opts...).ToFunc()
+}
+
+// ByUsageBillingMultiplier orders the results by the usage_billing_multiplier field.
+func ByUsageBillingMultiplier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUsageBillingMultiplier, opts...).ToFunc()
 }
 
 // ByCurrency orders the results by the currency field.

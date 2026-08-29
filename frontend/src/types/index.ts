@@ -1085,7 +1085,8 @@ export interface Account {
   } | null
   scheduler_scores?: AccountSchedulerGroupScore[] | null
   priority: number
-  rate_multiplier?: number // Account billing multiplier (>=0, 0 means free)
+  rate_multiplier?: number // Provider-cost/accounting multiplier; not customer normalization.
+  usage_billing_multiplier?: number // Customer debit normalization multiplier (>0); absent legacy payloads mean 1.
   status: 'active' | 'inactive' | 'error'
   error_message: string | null
   last_used_at: string | null
@@ -1348,7 +1349,8 @@ export interface CreateAccountRequest {
   concurrency?: number
   load_factor?: number | null
   priority?: number
-  rate_multiplier?: number // Account billing multiplier (>=0, 0 means free)
+  rate_multiplier?: number // Provider-cost/accounting multiplier; not customer normalization.
+  usage_billing_multiplier?: number // Customer debit normalization multiplier (>0).
   group_ids?: number[]
   expires_at?: number | null
   auto_pause_on_expired?: boolean
@@ -1366,7 +1368,8 @@ export interface UpdateAccountRequest {
   concurrency?: number
   load_factor?: number | null
   priority?: number
-  rate_multiplier?: number // Account billing multiplier (>=0, 0 means free)
+  rate_multiplier?: number // Provider-cost/accounting multiplier; not customer normalization.
+  usage_billing_multiplier?: number // Customer debit normalization multiplier (>0).
   schedulable?: boolean
   status?: 'active' | 'inactive' | 'error'
   group_ids?: number[]
@@ -1456,6 +1459,7 @@ export interface AdminDataAccount {
   concurrency: number
   priority: number
   rate_multiplier?: number | null
+  usage_billing_multiplier?: number | null
   expires_at?: number | null
   auto_pause_on_expired?: boolean
 }
@@ -1486,6 +1490,7 @@ export interface CodexSessionImportRequest {
   concurrency?: number
   priority?: number
   rate_multiplier?: number
+  usage_billing_multiplier?: number
   load_factor?: number | null
   expires_at?: number | null
   auto_pause_on_expired?: boolean
@@ -1505,6 +1510,7 @@ export interface OpenAICodexPATCreateRequest {
   concurrency?: number
   priority?: number
   rate_multiplier?: number
+  usage_billing_multiplier?: number
   load_factor?: number | null
   expires_at?: number | null
   auto_pause_on_expired?: boolean

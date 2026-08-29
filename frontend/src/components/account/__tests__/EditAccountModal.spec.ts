@@ -316,6 +316,29 @@ describe('EditAccountModal', () => {
     authIsSimpleMode.value = true
   })
 
+  it('loads and submits the customer usage billing multiplier independently', async () => {
+    const account = buildAccount()
+    account.rate_multiplier = 1.25
+    account.usage_billing_multiplier = 4.545454545
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+    const input = wrapper.get('[data-testid="usage-billing-multiplier"]')
+    expect((input.element as HTMLInputElement).value).toBe('4.545454545')
+
+    await input.setValue('0.714285714')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]).toMatchObject({
+      rate_multiplier: 1.25,
+      usage_billing_multiplier: 0.714285714
+    })
+  })
+
   it('reopening the same account rehydrates the OpenAI whitelist from props', async () => {
     const account = buildAccount()
     updateAccountMock.mockReset()

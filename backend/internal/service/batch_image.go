@@ -126,6 +126,7 @@ type BatchImageJob struct {
 	BaseUnitPrice           float64
 	GroupRateMultiplier     float64
 	AccountRateMultiplier   float64
+	UsageBillingMultiplier  float64
 	BatchDiscountMultiplier float64
 	HoldMultiplier          float64
 	BillableUnitPrice       float64
@@ -186,6 +187,7 @@ type CreateBatchImageJobParams struct {
 	BaseUnitPrice           float64
 	GroupRateMultiplier     float64
 	AccountRateMultiplier   float64
+	UsageBillingMultiplier  float64
 	BatchDiscountMultiplier float64
 	HoldMultiplier          float64
 	BillableUnitPrice       float64

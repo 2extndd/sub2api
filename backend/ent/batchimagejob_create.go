@@ -262,6 +262,20 @@ func (_c *BatchImageJobCreate) SetNillableActualCost(v *float64) *BatchImageJobC
 	return _c
 }
 
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (_c *BatchImageJobCreate) SetUsageBillingMultiplier(v float64) *BatchImageJobCreate {
+	_c.mutation.SetUsageBillingMultiplier(v)
+	return _c
+}
+
+// SetNillableUsageBillingMultiplier sets the "usage_billing_multiplier" field if the given value is not nil.
+func (_c *BatchImageJobCreate) SetNillableUsageBillingMultiplier(v *float64) *BatchImageJobCreate {
+	if v != nil {
+		_c.SetUsageBillingMultiplier(*v)
+	}
+	return _c
+}
+
 // SetCurrency sets the "currency" field.
 func (_c *BatchImageJobCreate) SetCurrency(v string) *BatchImageJobCreate {
 	_c.mutation.SetCurrency(v)
@@ -601,6 +615,10 @@ func (_c *BatchImageJobCreate) defaults() {
 		v := batchimagejob.DefaultEstimatedCost
 		_c.mutation.SetEstimatedCost(v)
 	}
+	if _, ok := _c.mutation.UsageBillingMultiplier(); !ok {
+		v := batchimagejob.DefaultUsageBillingMultiplier
+		_c.mutation.SetUsageBillingMultiplier(v)
+	}
 	if _, ok := _c.mutation.Currency(); !ok {
 		v := batchimagejob.DefaultCurrency
 		_c.mutation.SetCurrency(v)
@@ -707,6 +725,9 @@ func (_c *BatchImageJobCreate) check() error {
 	}
 	if _, ok := _c.mutation.EstimatedCost(); !ok {
 		return &ValidationError{Name: "estimated_cost", err: errors.New(`ent: missing required field "BatchImageJob.estimated_cost"`)}
+	}
+	if _, ok := _c.mutation.UsageBillingMultiplier(); !ok {
+		return &ValidationError{Name: "usage_billing_multiplier", err: errors.New(`ent: missing required field "BatchImageJob.usage_billing_multiplier"`)}
 	}
 	if _, ok := _c.mutation.Currency(); !ok {
 		return &ValidationError{Name: "currency", err: errors.New(`ent: missing required field "BatchImageJob.currency"`)}
@@ -859,6 +880,10 @@ func (_c *BatchImageJobCreate) createSpec() (*BatchImageJob, *sqlgraph.CreateSpe
 	if value, ok := _c.mutation.ActualCost(); ok {
 		_spec.SetField(batchimagejob.FieldActualCost, field.TypeFloat64, value)
 		_node.ActualCost = &value
+	}
+	if value, ok := _c.mutation.UsageBillingMultiplier(); ok {
+		_spec.SetField(batchimagejob.FieldUsageBillingMultiplier, field.TypeFloat64, value)
+		_node.UsageBillingMultiplier = value
 	}
 	if value, ok := _c.mutation.Currency(); ok {
 		_spec.SetField(batchimagejob.FieldCurrency, field.TypeString, value)
@@ -1331,6 +1356,24 @@ func (u *BatchImageJobUpsert) AddActualCost(v float64) *BatchImageJobUpsert {
 // ClearActualCost clears the value of the "actual_cost" field.
 func (u *BatchImageJobUpsert) ClearActualCost() *BatchImageJobUpsert {
 	u.SetNull(batchimagejob.FieldActualCost)
+	return u
+}
+
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (u *BatchImageJobUpsert) SetUsageBillingMultiplier(v float64) *BatchImageJobUpsert {
+	u.Set(batchimagejob.FieldUsageBillingMultiplier, v)
+	return u
+}
+
+// UpdateUsageBillingMultiplier sets the "usage_billing_multiplier" field to the value that was provided on create.
+func (u *BatchImageJobUpsert) UpdateUsageBillingMultiplier() *BatchImageJobUpsert {
+	u.SetExcluded(batchimagejob.FieldUsageBillingMultiplier)
+	return u
+}
+
+// AddUsageBillingMultiplier adds v to the "usage_billing_multiplier" field.
+func (u *BatchImageJobUpsert) AddUsageBillingMultiplier(v float64) *BatchImageJobUpsert {
+	u.Add(batchimagejob.FieldUsageBillingMultiplier, v)
 	return u
 }
 
@@ -2108,6 +2151,27 @@ func (u *BatchImageJobUpsertOne) UpdateActualCost() *BatchImageJobUpsertOne {
 func (u *BatchImageJobUpsertOne) ClearActualCost() *BatchImageJobUpsertOne {
 	return u.Update(func(s *BatchImageJobUpsert) {
 		s.ClearActualCost()
+	})
+}
+
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (u *BatchImageJobUpsertOne) SetUsageBillingMultiplier(v float64) *BatchImageJobUpsertOne {
+	return u.Update(func(s *BatchImageJobUpsert) {
+		s.SetUsageBillingMultiplier(v)
+	})
+}
+
+// AddUsageBillingMultiplier adds v to the "usage_billing_multiplier" field.
+func (u *BatchImageJobUpsertOne) AddUsageBillingMultiplier(v float64) *BatchImageJobUpsertOne {
+	return u.Update(func(s *BatchImageJobUpsert) {
+		s.AddUsageBillingMultiplier(v)
+	})
+}
+
+// UpdateUsageBillingMultiplier sets the "usage_billing_multiplier" field to the value that was provided on create.
+func (u *BatchImageJobUpsertOne) UpdateUsageBillingMultiplier() *BatchImageJobUpsertOne {
+	return u.Update(func(s *BatchImageJobUpsert) {
+		s.UpdateUsageBillingMultiplier()
 	})
 }
 
@@ -3106,6 +3170,27 @@ func (u *BatchImageJobUpsertBulk) UpdateActualCost() *BatchImageJobUpsertBulk {
 func (u *BatchImageJobUpsertBulk) ClearActualCost() *BatchImageJobUpsertBulk {
 	return u.Update(func(s *BatchImageJobUpsert) {
 		s.ClearActualCost()
+	})
+}
+
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (u *BatchImageJobUpsertBulk) SetUsageBillingMultiplier(v float64) *BatchImageJobUpsertBulk {
+	return u.Update(func(s *BatchImageJobUpsert) {
+		s.SetUsageBillingMultiplier(v)
+	})
+}
+
+// AddUsageBillingMultiplier adds v to the "usage_billing_multiplier" field.
+func (u *BatchImageJobUpsertBulk) AddUsageBillingMultiplier(v float64) *BatchImageJobUpsertBulk {
+	return u.Update(func(s *BatchImageJobUpsert) {
+		s.AddUsageBillingMultiplier(v)
+	})
+}
+
+// UpdateUsageBillingMultiplier sets the "usage_billing_multiplier" field to the value that was provided on create.
+func (u *BatchImageJobUpsertBulk) UpdateUsageBillingMultiplier() *BatchImageJobUpsertBulk {
+	return u.Update(func(s *BatchImageJobUpsert) {
+		s.UpdateUsageBillingMultiplier()
 	})
 }
 
