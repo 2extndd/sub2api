@@ -53,8 +53,8 @@ func run(ctx context.Context, db *sql.DB, cache service.APIKeyCache, value *mani
 		if len(strings.TrimSpace(opts.ExpectedChecksum)) != sha256.Size*2 || !strings.EqualFold(opts.ExpectedChecksum, manifestChecksum) {
 			return runSummary{}, errors.New("exact subset dry-run and execute require the matching --manifest-sha256")
 		}
-		if len(exclusions) != 0 || opts.OnlyID > 0 || opts.AfterID > 0 || opts.Direction != "forward" || opts.AllowProtectedDrift || opts.RepairCacheOnly {
-			return runSummary{}, errors.New("exact subset mode forbids exclusions, partial selection, rollback direction, protected drift, and cache-only repair")
+		if len(exclusions) != 0 || opts.OnlyID > 0 || opts.AfterID > 0 || opts.Direction != "forward" || opts.RepairCacheOnly {
+			return runSummary{}, errors.New("exact subset mode forbids exclusions, partial selection, rollback direction, and cache-only repair")
 		}
 		if opts.BatchSize < requiredSubsetSize {
 			return runSummary{}, fmt.Errorf("exact subset mode requires --batch-size >= %d", requiredSubsetSize)
