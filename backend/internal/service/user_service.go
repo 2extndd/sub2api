@@ -43,6 +43,10 @@ var (
 		"IDENTITY_UNBIND_LAST_METHOD",
 		"bind another sign-in method before unbinding this provider",
 	)
+	ErrUserAccountDenialRevisionConflict = infraerrors.Conflict(
+		"USER_ACCOUNT_DENIAL_REVISION_CONFLICT",
+		"upstream account exclusions changed; reload and try again",
+	)
 )
 
 const (
@@ -179,6 +183,14 @@ type UserRepository interface {
 	UpdateTotpSecret(ctx context.Context, userID int64, encryptedSecret *string) error
 	EnableTotp(ctx context.Context, userID int64) error
 	DisableTotp(ctx context.Context, userID int64) error
+}
+
+// UserAccountDenialRepository is intentionally separate from UserRepository so
+// the routing feature stays additive and existing narrow test doubles remain valid.
+type UserAccountDenialRepository interface {
+	GetDeniedAccountPolicy(ctx context.Context, userID int64) (accountIDs []int64, revision int64, err error)
+	ReplaceDeniedAccountPolicy(ctx context.Context, userID int64, expectedRevision int64, accountIDs []int64) (newRevision int64, err error)
+	GetUsersDenyingAccount(ctx context.Context, accountID int64) ([]UserAccountDenialUser, error)
 }
 
 // RedeemUserAdjustmentRepository provides the atomic, floor-at-zero updates

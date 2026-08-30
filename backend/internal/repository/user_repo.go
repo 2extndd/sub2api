@@ -1410,3 +1410,100 @@ func (r *userRepository) DisableTotp(ctx context.Context, userID int64) error {
 	}
 	return nil
 }
+
+func (r *userRepository) GetDeniedAccountPolicy(ctx context.Context, userID int64) ([]int64, int64, error) {
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT COALESCE(p.revision, 0), a.id
+		FROM (SELECT $1::bigint AS user_id) requested
+		LEFT JOIN user_account_denial_policies p ON p.user_id = requested.user_id
+		LEFT JOIN user_account_denials d ON d.user_id = requested.user_id
+		LEFT JOIN accounts a ON a.id = d.account_id AND a.deleted_at IS NULL
+		ORDER BY a.id`, userID)
+	if err != nil {
+		return nil, 0, fmt.Errorf("get user account denial policy: %w", err)
+	}
+	defer rows.Close()
+
+	accountIDs := make([]int64, 0)
+	var revision int64
+	for rows.Next() {
+		var accountID sql.NullInt64
+		if err := rows.Scan(&revision, &accountID); err != nil {
+			return nil, 0, fmt.Errorf("scan user account denial policy: %w", err)
+		}
+		if accountID.Valid {
+			accountIDs = append(accountIDs, accountID.Int64)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate user account denial policy: %w", err)
+	}
+	return accountIDs, revision, nil
+}
+
+func (r *userRepository) ReplaceDeniedAccountPolicy(ctx context.Context, userID int64, expectedRevision int64, accountIDs []int64) (int64, error) {
+	rows, err := r.sql.QueryContext(ctx, `
+		WITH bumped AS (
+			INSERT INTO user_account_denial_policies (user_id, revision)
+			SELECT $1, 1 WHERE $3 = 0
+			ON CONFLICT (user_id) DO UPDATE
+			SET revision = user_account_denial_policies.revision + 1,
+				updated_at = NOW()
+			WHERE user_account_denial_policies.revision = $3
+			RETURNING revision
+		), inserted AS (
+			INSERT INTO user_account_denials (user_id, account_id)
+			SELECT $1, a.id
+			FROM accounts a
+			CROSS JOIN bumped
+			WHERE a.id = ANY($2::bigint[]) AND a.deleted_at IS NULL
+			ON CONFLICT (user_id, account_id) DO NOTHING
+		), deleted AS (
+			DELETE FROM user_account_denials d
+			WHERE d.user_id = $1
+				AND NOT (d.account_id = ANY($2::bigint[]))
+				AND EXISTS (SELECT 1 FROM bumped)
+		)
+		SELECT revision FROM bumped`, userID, pq.Array(accountIDs), expectedRevision)
+	if err != nil {
+		return 0, fmt.Errorf("replace user account denial policy: %w", err)
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return 0, fmt.Errorf("replace user account denial policy: %w", err)
+		}
+		return 0, service.ErrUserAccountDenialRevisionConflict
+	}
+	var revision int64
+	if err := rows.Scan(&revision); err != nil {
+		return 0, fmt.Errorf("scan user account denial policy revision: %w", err)
+	}
+	return revision, nil
+}
+
+func (r *userRepository) GetUsersDenyingAccount(ctx context.Context, accountID int64) ([]service.UserAccountDenialUser, error) {
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT u.id, u.email
+		FROM user_account_denials d
+		JOIN users u ON u.id = d.user_id
+		WHERE d.account_id = $1 AND u.deleted_at IS NULL
+		ORDER BY u.id`, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("list users denying account: %w", err)
+	}
+	defer rows.Close()
+
+	users := make([]service.UserAccountDenialUser, 0)
+	for rows.Next() {
+		var user service.UserAccountDenialUser
+		if err := rows.Scan(&user.UserID, &user.Email); err != nil {
+			return nil, fmt.Errorf("scan user denying account: %w", err)
+		}
+		users = append(users, user)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate users denying account: %w", err)
+	}
+	return users, nil
+}

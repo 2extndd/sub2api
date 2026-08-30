@@ -505,6 +505,73 @@ func (s *adminServiceImpl) BatchUpdateLimits(ctx context.Context, userIDs []int6
 	return affected, nil
 }
 
+// GetUserAccountDenials returns the explicit upstream account deny-list for a user.
+// An empty list means all current and future otherwise eligible accounts are allowed.
+func (s *adminServiceImpl) GetUserAccountDenials(ctx context.Context, userID int64) (*UserAccountDenials, error) {
+	if _, err := s.userRepo.GetByID(ctx, userID); err != nil {
+		return nil, err
+	}
+	denialRepo, ok := s.userRepo.(UserAccountDenialRepository)
+	if !ok {
+		return nil, fmt.Errorf("user account denial repository is not configured")
+	}
+	accountIDs, revision, err := denialRepo.GetDeniedAccountPolicy(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &UserAccountDenials{UserID: userID, Revision: revision, AccountIDs: accountIDs}, nil
+}
+
+// ReplaceUserAccountDenials atomically replaces a user's deny-list and evicts
+// every API-key auth snapshot owned by that user so enforcement is immediate.
+func (s *adminServiceImpl) ReplaceUserAccountDenials(ctx context.Context, userID int64, expectedRevision int64, accountIDs []int64) (*UserAccountDenials, error) {
+	if expectedRevision < 0 {
+		return nil, infraerrors.BadRequest("USER_ACCOUNT_DENIAL_REVISION_INVALID", "expected revision must be non-negative")
+	}
+	if _, err := s.userRepo.GetByID(ctx, userID); err != nil {
+		return nil, err
+	}
+	unique := make(map[int64]struct{}, len(accountIDs))
+	for _, accountID := range accountIDs {
+		if accountID > 0 {
+			unique[accountID] = struct{}{}
+		}
+	}
+	normalized := make([]int64, 0, len(unique))
+	for accountID := range unique {
+		normalized = append(normalized, accountID)
+	}
+	sort.Slice(normalized, func(i, j int) bool { return normalized[i] < normalized[j] })
+	denialRepo, ok := s.userRepo.(UserAccountDenialRepository)
+	if !ok {
+		return nil, fmt.Errorf("user account denial repository is not configured")
+	}
+	if _, err := denialRepo.ReplaceDeniedAccountPolicy(ctx, userID, expectedRevision, normalized); err != nil {
+		return nil, err
+	}
+	if s.authCacheInvalidator != nil {
+		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
+	}
+	storedIDs, storedRevision, err := denialRepo.GetDeniedAccountPolicy(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &UserAccountDenials{UserID: userID, Revision: storedRevision, AccountIDs: storedIDs}, nil
+}
+
+// GetAccountDenyingUsers provides a read-only account-side projection of the
+// authoritative user deny rules. Editing remains user-scoped.
+func (s *adminServiceImpl) GetAccountDenyingUsers(ctx context.Context, accountID int64) ([]UserAccountDenialUser, error) {
+	if accountID <= 0 {
+		return nil, infraerrors.BadRequest("ACCOUNT_ID_INVALID", "account ID must be positive")
+	}
+	denialRepo, ok := s.userRepo.(UserAccountDenialRepository)
+	if !ok {
+		return nil, fmt.Errorf("user account denial repository is not configured")
+	}
+	return denialRepo.GetUsersDenyingAccount(ctx, accountID)
+}
+
 func (s *adminServiceImpl) UpdateUserBalance(ctx context.Context, userID int64, balance float64, operation string, notes string) (*User, error) {
 	// 余额调整必须走原子接口：先读后整行写回会把并发的计费扣款覆盖掉。
 	var (

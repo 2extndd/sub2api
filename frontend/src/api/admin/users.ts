@@ -6,6 +6,12 @@
 import { apiClient } from '../client'
 import type { AdminUser, UpdateUserRequest, PaginatedResponse, ApiKey } from '@/types'
 
+export interface UserAccountDenials {
+  user_id: number
+  revision: number
+  account_ids: number[]
+}
+
 export interface AdminBindAuthIdentityChannelRequest {
   channel: string
   channel_app_id: string
@@ -399,6 +405,19 @@ export async function resetPlatformQuotaWindow(
   return data
 }
 
+export async function getAccountDenials(id: number): Promise<UserAccountDenials> {
+  const { data } = await apiClient.get<UserAccountDenials>(`/admin/users/${id}/account-denials`)
+  return data
+}
+
+export async function replaceAccountDenials(id: number, expectedRevision: number, accountIds: number[]): Promise<UserAccountDenials> {
+  const { data } = await apiClient.put<UserAccountDenials>(`/admin/users/${id}/account-denials`, {
+    expected_revision: expectedRevision,
+    account_ids: accountIds
+  })
+  return data
+}
+
 export const usersAPI = {
   list,
   getById,
@@ -417,6 +436,8 @@ export const usersAPI = {
   getPlatformQuotas,
   updatePlatformQuotas,
   resetPlatformQuotaWindow,
+  getAccountDenials,
+  replaceAccountDenials,
 }
 
 export default usersAPI

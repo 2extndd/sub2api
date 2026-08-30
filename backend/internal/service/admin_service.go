@@ -138,6 +138,23 @@ type AdminService interface {
 }
 
 // CreateUserInput represents input for creating a new user via admin operations.
+type UserAccountDenialAdminService interface {
+	GetUserAccountDenials(ctx context.Context, userID int64) (*UserAccountDenials, error)
+	ReplaceUserAccountDenials(ctx context.Context, userID int64, expectedRevision int64, accountIDs []int64) (*UserAccountDenials, error)
+	GetAccountDenyingUsers(ctx context.Context, accountID int64) ([]UserAccountDenialUser, error)
+}
+
+type UserAccountDenialUser struct {
+	UserID int64  `json:"user_id"`
+	Email  string `json:"email"`
+}
+
+type UserAccountDenials struct {
+	UserID     int64   `json:"user_id"`
+	Revision   int64   `json:"revision"`
+	AccountIDs []int64 `json:"account_ids"`
+}
+
 type CreateUserInput struct {
 	Email         string
 	Password      string

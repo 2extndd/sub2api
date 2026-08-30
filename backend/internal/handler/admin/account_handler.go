@@ -778,6 +778,27 @@ func (h *AccountHandler) GetByID(c *gin.Context) {
 	response.Success(c, h.buildAccountResponseWithRuntime(c.Request.Context(), account))
 }
 
+// GetDenyingUsers returns the users that explicitly exclude this account.
+// GET /api/v1/admin/accounts/:id/denying-users
+func (h *AccountHandler) GetDenyingUsers(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || accountID <= 0 {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+	denialService, ok := h.adminService.(service.UserAccountDenialAdminService)
+	if !ok {
+		response.InternalError(c, "User account denial service is not configured")
+		return
+	}
+	users, err := denialService.GetAccountDenyingUsers(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"account_id": accountID, "users": users})
+}
+
 // CheckMixedChannel handles checking mixed channel risk for account-group binding.
 // POST /api/v1/admin/accounts/check-mixed-channel
 func (h *AccountHandler) CheckMixedChannel(c *gin.Context) {

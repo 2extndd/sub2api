@@ -628,6 +628,7 @@ func (s *BatchImagePublicService) ListModels(ctx context.Context, owner BatchIma
 	}
 
 	modelsByProvider := make(map[string]map[string]struct{})
+	deniedAccountIDs := mergeAccountDenialsFromContext(ctx, nil)
 	for _, providerName := range batchImageProviderSelectionOrder("") {
 		provider, ok := s.ProviderRegistry.Get(providerName)
 		if !ok || provider == nil {
@@ -639,6 +640,9 @@ func (s *BatchImagePublicService) ListModels(ctx context.Context, owner BatchIma
 		}
 		for i := range accounts {
 			account := accounts[i]
+			if _, denied := deniedAccountIDs[account.ID]; denied {
+				continue
+			}
 			if !account.IsSchedulable() || !provider.SupportsAccount(&account) {
 				continue
 			}
@@ -937,6 +941,7 @@ func maxBatchImageReferenceImagesForModel(model string) int {
 
 func (s *BatchImagePublicService) selectProviderAndAccount(ctx context.Context, owner BatchImageOwner, requestedProvider, model string) (BatchImageProvider, *Account, error) {
 	providers := batchImageProviderSelectionOrder(requestedProvider)
+	deniedAccountIDs := mergeAccountDenialsFromContext(ctx, nil)
 	for _, providerName := range providers {
 		provider, ok := s.ProviderRegistry.Get(providerName)
 		if !ok || provider == nil {
@@ -954,6 +959,9 @@ func (s *BatchImagePublicService) selectProviderAndAccount(ctx context.Context, 
 		})
 		for i := range accounts {
 			account := accounts[i]
+			if _, denied := deniedAccountIDs[account.ID]; denied {
+				continue
+			}
 			if !account.IsSchedulable() || !account.IsModelSupported(model) {
 				continue
 			}

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -513,6 +514,22 @@ func TestBatchImagePublicService_ListModels(t *testing.T) {
 			Object:   "image.batch.model",
 			Provider: BatchImageProviderVertex,
 		}}, got.Data)
+	})
+
+	t.Run("hides models and rejects selection when the only account is denied", func(t *testing.T) {
+		svc, _, _, _, _ := newTestBatchImagePublicService(true)
+		accountRepo := svc.AccountRepo.(*publicBatchImageAccountRepo)
+		accountRepo.accounts = []Account{testBatchImageMappedAccount(303, AccountTypeAPIKey, map[string]any{
+			"gemini-2.5-flash-image": "gemini-2.5-flash-image",
+		})}
+		deniedCtx := context.WithValue(ctx, ctxkey.DeniedAccountIDs, []int64{303})
+
+		models, err := svc.ListModels(deniedCtx, testBatchImageOwner())
+		require.NoError(t, err)
+		require.Empty(t, models.Data)
+
+		_, _, err = svc.selectProviderAndAccount(deniedCtx, testBatchImageOwner(), BatchImageProviderGeminiAPI, "gemini-2.5-flash-image")
+		require.ErrorIs(t, err, ErrBatchImageNoAccountAvailable)
 	})
 
 	t.Run("expands wildcard mappings against batch image candidates", func(t *testing.T) {

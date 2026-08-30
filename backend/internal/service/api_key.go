@@ -45,7 +45,10 @@ type APIKey struct {
 	UpdatedAt           time.Time
 	User                *User
 	Group               *Group
-	CurrentConcurrency  int
+	// DeniedAccountIDs is the authenticated owner's persistent upstream deny-list.
+	// Empty means every otherwise eligible current or future account is available.
+	DeniedAccountIDs   []int64
+	CurrentConcurrency int
 
 	// Quota fields
 	Quota     float64    // Quota limit in USD (0 = unlimited)
