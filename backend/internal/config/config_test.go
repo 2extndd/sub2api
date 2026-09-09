@@ -404,6 +404,323 @@ func TestLoadDefaultSchedulingConfig(t *testing.T) {
 	}
 }
 
+func TestLoadOpenAILatencyShadowDefaultsAndCardinality(t *testing.T) {
+	resetViperWithJWTSecret(t)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	shadow := cfg.Gateway.Scheduling.OpenAILatencyShadow
+	require.False(t, shadow.Enabled)
+	require.Equal(t, DefaultOpenAILatencyShadowMaxTrackedAccounts, shadow.MaxTrackedAccounts)
+	require.Equal(t, 256, shadow.MaxTrackedAccounts)
+	require.Equal(t, DefaultOpenAILatencyShadowMaxCohortsPerAccount, shadow.MaxCohortsPerAccount)
+	require.Equal(t, 64, shadow.MaxCohortsPerAccount)
+	require.Equal(t, DefaultOpenAILatencyShadowMaxTracks, shadow.MaxTracks)
+	require.Equal(t, 8192, shadow.MaxTracks)
+	require.Equal(t, 0.25, shadow.WeightFloor)
+	require.Equal(t, 3, shadow.QuarantineCap)
+	require.Equal(t, 7, shadow.HardValidFloor)
+	require.Equal(t, 90, shadow.IncidentWindowSeconds)
+	require.Equal(t, 4, shadow.IncidentMinAffectedAccounts)
+	require.Equal(t, 0.4, shadow.IncidentMinAffectedFraction)
+	require.Equal(t, 30, shadow.PenalizedCooldownSeconds)
+	require.Equal(t, 120, shadow.QuarantinedCooldownSeconds)
+	require.Equal(t, 300, shadow.HardInvalidCooldownSeconds)
+	require.Equal(t, 1800, shadow.LatencyHalfLifeSeconds)
+	require.Equal(t, 900, shadow.ErrorHalfLifeSeconds)
+	require.Equal(t, DefaultOpenAILatencyShadowTelemetryFinalizationIntervalSeconds, shadow.TelemetryFinalizationIntervalSeconds)
+	require.Equal(t, 60, shadow.TelemetryFinalizationIntervalSeconds)
+	require.Equal(t, DefaultOpenAILatencyShadowMaxTelemetryStreams, shadow.MaxTelemetryStreams)
+	require.Equal(t, DefaultOpenAILatencyShadowMaxTelemetryContributions, shadow.MaxTelemetryContributions)
+
+	cfg.Gateway.Scheduling.OpenAILatencyShadow.Enabled = true
+	cfg.Gateway.Scheduling.OpenAILatencyShadow.MaxTrackedAccounts = 0
+	require.ErrorContains(t, cfg.Validate(), "openai_latency_shadow.max_tracked_accounts")
+
+	cfg.Gateway.Scheduling.OpenAILatencyShadow.MaxTrackedAccounts = DefaultOpenAILatencyShadowMaxTrackedAccounts
+	cfg.Gateway.Scheduling.OpenAILatencyShadow.MaxCohortsPerAccount = MaximumOpenAILatencyShadowCohortsPerAccount + 1
+	require.ErrorContains(t, cfg.Validate(), "openai_latency_shadow.max_cohorts_per_account")
+
+	cfg.Gateway.Scheduling.OpenAILatencyShadow.MaxCohortsPerAccount = DefaultOpenAILatencyShadowMaxCohortsPerAccount
+	cfg.Gateway.Scheduling.OpenAILatencyShadow.MaxTracks = 2*cfg.Gateway.Scheduling.OpenAILatencyShadow.MaxTrackedAccounts - 1
+	require.ErrorContains(t, cfg.Validate(), "openai_latency_shadow.max_tracks")
+}
+
+func TestValidateOpenAILatencyShadowPolicy(t *testing.T) {
+	resetViperWithJWTSecret(t)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	base := cfg.Gateway.Scheduling.OpenAILatencyShadow
+	base.Enabled = true
+	cfg.Gateway.Scheduling.OpenAILatencyShadow = base
+	require.NoError(t, cfg.Validate())
+
+	tests := map[string]func(*OpenAILatencyShadowConfig){
+		"zero weight floor":          func(c *OpenAILatencyShadowConfig) { c.WeightFloor = 0 },
+		"non-finite weight floor":    func(c *OpenAILatencyShadowConfig) { c.WeightFloor = math.Inf(1) },
+		"negative quarantine cap":    func(c *OpenAILatencyShadowConfig) { c.QuarantineCap = -1 },
+		"negative hard-valid floor":  func(c *OpenAILatencyShadowConfig) { c.HardValidFloor = -1 },
+		"zero incident window":       func(c *OpenAILatencyShadowConfig) { c.IncidentWindowSeconds = 0 },
+		"zero affected accounts":     func(c *OpenAILatencyShadowConfig) { c.IncidentMinAffectedAccounts = 0 },
+		"zero affected fraction":     func(c *OpenAILatencyShadowConfig) { c.IncidentMinAffectedFraction = 0 },
+		"fraction above one":         func(c *OpenAILatencyShadowConfig) { c.IncidentMinAffectedFraction = 1.1 },
+		"zero penalized cooldown":    func(c *OpenAILatencyShadowConfig) { c.PenalizedCooldownSeconds = 0 },
+		"zero quarantined cooldown":  func(c *OpenAILatencyShadowConfig) { c.QuarantinedCooldownSeconds = 0 },
+		"zero hard-invalid cooldown": func(c *OpenAILatencyShadowConfig) { c.HardInvalidCooldownSeconds = 0 },
+		"zero latency half-life":     func(c *OpenAILatencyShadowConfig) { c.LatencyHalfLifeSeconds = 0 },
+		"zero error half-life":       func(c *OpenAILatencyShadowConfig) { c.ErrorHalfLifeSeconds = 0 },
+		"zero contribution limit":    func(c *OpenAILatencyShadowConfig) { c.MaxTelemetryContributions = 0 },
+		"large contribution limit": func(c *OpenAILatencyShadowConfig) {
+			c.MaxTelemetryContributions = MaximumOpenAILatencyShadowMaxTelemetryContributions + 1
+		},
+		"short raw retention": func(c *OpenAILatencyShadowConfig) {
+			c.TelemetryRedisRawRetentionSeconds = 60*60 + c.TelemetryFinalizationGraceSeconds + c.TelemetrySourceTTLSeconds - 1
+		},
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			candidate := base
+			mutate(&candidate)
+			cfg.Gateway.Scheduling.OpenAILatencyShadow = candidate
+			require.ErrorContains(t, cfg.Validate(), "openai_latency_shadow")
+		})
+	}
+}
+
+func TestValidateOpenAILatencyShadowFinalizationInterval(t *testing.T) {
+	resetViperWithJWTSecret(t)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	base := cfg.Gateway.Scheduling.OpenAILatencyShadow
+	base.Enabled = true
+
+	tests := []struct {
+		name        string
+		interval    int
+		wantErrText string
+	}{
+		{name: "bucket duration", interval: base.TelemetryBucketSeconds},
+		{name: "maximum", interval: 15 * 60},
+		{
+			name:        "below bucket duration",
+			interval:    base.TelemetryBucketSeconds - 1,
+			wantErrText: "telemetry_finalization_interval_seconds must be at least telemetry_bucket_seconds",
+		},
+		{
+			name:        "above maximum",
+			interval:    15*60 + 1,
+			wantErrText: "telemetry_finalization_interval_seconds must not exceed 900",
+		},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			candidate := base
+			candidate.TelemetryFinalizationIntervalSeconds = testCase.interval
+			cfg.Gateway.Scheduling.OpenAILatencyShadow = candidate
+			err := cfg.Validate()
+			if testCase.wantErrText == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, testCase.wantErrText)
+		})
+	}
+}
+
+func TestLoadOpenAIHedgeDefaultsDisabled(t *testing.T) {
+	resetViperWithJWTSecret(t)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	hedge := cfg.Gateway.Scheduling.OpenAIHedge
+	require.False(t, hedge.Enabled)
+	require.Equal(t, DefaultOpenAIHedgeStandardThresholdSeconds, hedge.StandardThresholdSeconds)
+	require.Equal(t, DefaultOpenAIHedgeHighThresholdSeconds, hedge.HighThresholdSeconds)
+	require.Equal(t, DefaultOpenAIHedgeVeryHeavyThresholdSeconds, hedge.VeryHeavyThresholdSeconds)
+	require.Equal(t, DefaultOpenAIHedgeEventChannelCapacity, hedge.EventChannelCapacity)
+	require.Equal(t, DefaultOpenAIHedgeMaxPrecommitEvents, hedge.MaxPrecommitEvents)
+	require.Equal(t, DefaultOpenAIHedgeMaxPrecommitBytes, hedge.MaxPrecommitBytes)
+	require.Equal(t, DefaultOpenAIHedgeCancelDrainTimeoutSeconds, hedge.CancelDrainTimeoutSeconds)
+	require.Zero(t, hedge.CanaryBasisPoints)
+	require.Equal(t, 2, hedge.MaxAttempts)
+	require.False(t, hedge.VeryHeavyEnabled)
+	require.False(t, hedge.NoProgressEnabled)
+}
+
+func TestLoadOpenAIHedgeCanaryBasisPoints(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	viper.Set("gateway.scheduling.openai_hedge.canary_basis_points", 125)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, 125, cfg.Gateway.Scheduling.OpenAIHedge.CanaryBasisPoints)
+}
+
+func TestValidateOpenAIHedgePolicy(t *testing.T) {
+	resetViperWithJWTSecret(t)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	base := cfg.Gateway.Scheduling.OpenAIHedge
+	base.Enabled = true
+
+	tests := []struct {
+		name        string
+		mutate      func(*OpenAIHedgeConfig)
+		wantErrText string
+	}{
+		{name: "valid defaults", mutate: func(*OpenAIHedgeConfig) {}},
+		{name: "full canary basis points", mutate: func(h *OpenAIHedgeConfig) { h.CanaryBasisPoints = MaximumOpenAIHedgeCanaryBasisPoints }},
+		{name: "negative canary basis points", mutate: func(h *OpenAIHedgeConfig) { h.CanaryBasisPoints = -1 }, wantErrText: "canary_basis_points"},
+		{name: "canary basis points above maximum", mutate: func(h *OpenAIHedgeConfig) { h.CanaryBasisPoints = MaximumOpenAIHedgeCanaryBasisPoints + 1 }, wantErrText: "canary_basis_points"},
+		{name: "zero standard threshold", mutate: func(h *OpenAIHedgeConfig) { h.StandardThresholdSeconds = 0 }, wantErrText: "standard_threshold_seconds"},
+		{name: "high before standard", mutate: func(h *OpenAIHedgeConfig) { h.HighThresholdSeconds = h.StandardThresholdSeconds - 1 }, wantErrText: "high_threshold_seconds"},
+		{name: "very heavy before high", mutate: func(h *OpenAIHedgeConfig) { h.VeryHeavyThresholdSeconds = h.HighThresholdSeconds - 1 }, wantErrText: "very_heavy_threshold_seconds"},
+		{name: "threshold above maximum", mutate: func(h *OpenAIHedgeConfig) { h.VeryHeavyThresholdSeconds = MaximumOpenAIHedgeThresholdSeconds + 1 }, wantErrText: "very_heavy_threshold_seconds"},
+		{name: "zero channel capacity", mutate: func(h *OpenAIHedgeConfig) { h.EventChannelCapacity = 0 }, wantErrText: "event_channel_capacity"},
+		{name: "channel exceeds precommit events", mutate: func(h *OpenAIHedgeConfig) { h.MaxPrecommitEvents = h.EventChannelCapacity - 1 }, wantErrText: "max_precommit_events"},
+		{name: "zero byte bound", mutate: func(h *OpenAIHedgeConfig) { h.MaxPrecommitBytes = 0 }, wantErrText: "max_precommit_bytes"},
+		{name: "zero cancel drain", mutate: func(h *OpenAIHedgeConfig) { h.CancelDrainTimeoutSeconds = 0 }, wantErrText: "cancel_drain_timeout_seconds"},
+		{name: "wrong max attempts", mutate: func(h *OpenAIHedgeConfig) { h.MaxAttempts = 3 }, wantErrText: "max_attempts"},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			candidate := base
+			testCase.mutate(&candidate)
+			cfg.Gateway.Scheduling.OpenAIHedge = candidate
+			err := cfg.Validate()
+			if testCase.wantErrText == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, testCase.wantErrText)
+		})
+	}
+
+	t.Run("disabled zero value remains inert", func(t *testing.T) {
+		cfg.Gateway.Scheduling.OpenAIHedge = OpenAIHedgeConfig{}
+		require.NoError(t, cfg.Validate())
+	})
+}
+
+func TestLoadOpenAIHedgeNewFieldsDefaults(t *testing.T) {
+	resetViperWithJWTSecret(t)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	hedge := cfg.Gateway.Scheduling.OpenAIHedge
+	require.False(t, hedge.Enabled)
+	require.Equal(t, 25, hedge.StandardThresholdSeconds)
+	require.Equal(t, 40, hedge.HighThresholdSeconds)
+	require.Equal(t, 60, hedge.VeryHeavyThresholdSeconds)
+	require.False(t, hedge.VeryHeavyEnabled)
+	require.False(t, hedge.NoProgressEnabled)
+	require.Equal(t, 65536, hedge.MaxPrecommitBytes)
+	require.Equal(t, 128, hedge.MaxPrecommitEvents)
+	require.Equal(t, 2, hedge.MaxAttempts)
+}
+
+func TestValidateOpenAIHedgeNewFields(t *testing.T) {
+	resetViperWithJWTSecret(t)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	base := cfg.Gateway.Scheduling.OpenAIHedge
+	base.Enabled = true
+
+	tests := []struct {
+		name        string
+		mutate      func(*OpenAIHedgeConfig)
+		wantErrText string
+	}{
+		{name: "valid new field defaults", mutate: func(*OpenAIHedgeConfig) {}},
+		{name: "max_attempts not 2", mutate: func(h *OpenAIHedgeConfig) { h.MaxAttempts = 1 }, wantErrText: "max_attempts must be exactly 2"},
+		{name: "max_attempts not 2 (too high)", mutate: func(h *OpenAIHedgeConfig) { h.MaxAttempts = 3 }, wantErrText: "max_attempts must be exactly 2"},
+		{name: "negative standard threshold", mutate: func(h *OpenAIHedgeConfig) { h.StandardThresholdSeconds = -1 }, wantErrText: "standard_threshold_seconds must be positive when enabled"},
+		{name: "negative high threshold", mutate: func(h *OpenAIHedgeConfig) { h.HighThresholdSeconds = -1 }, wantErrText: "high_threshold_seconds must be positive when enabled"},
+		{name: "negative very heavy threshold", mutate: func(h *OpenAIHedgeConfig) { h.VeryHeavyThresholdSeconds = -1 }, wantErrText: "very_heavy_threshold_seconds must be positive when enabled"},
+		{name: "high before standard", mutate: func(h *OpenAIHedgeConfig) { h.HighThresholdSeconds = h.StandardThresholdSeconds - 1 }, wantErrText: "high_threshold_seconds must be at least standard_threshold_seconds"},
+		{name: "very heavy before high", mutate: func(h *OpenAIHedgeConfig) { h.VeryHeavyThresholdSeconds = h.HighThresholdSeconds - 1 }, wantErrText: "very_heavy_threshold_seconds must be at least high_threshold_seconds"},
+		{name: "negative max precommit bytes", mutate: func(h *OpenAIHedgeConfig) { h.MaxPrecommitBytes = -1 }, wantErrText: "max_precommit_bytes must be positive when enabled"},
+		{name: "negative max precommit events", mutate: func(h *OpenAIHedgeConfig) { h.MaxPrecommitEvents = -1 }, wantErrText: "max_precommit_events must be positive when enabled"},
+		{name: "valid monotonic thresholds", mutate: func(h *OpenAIHedgeConfig) {
+			h.StandardThresholdSeconds = 10
+			h.HighThresholdSeconds = 20
+			h.VeryHeavyThresholdSeconds = 30
+		}},
+		{name: "valid equal thresholds", mutate: func(h *OpenAIHedgeConfig) {
+			h.StandardThresholdSeconds = 25
+			h.HighThresholdSeconds = 25
+			h.VeryHeavyThresholdSeconds = 25
+		}},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			candidate := base
+			testCase.mutate(&candidate)
+			cfg.Gateway.Scheduling.OpenAIHedge = candidate
+			err := cfg.Validate()
+			if testCase.wantErrText == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, testCase.wantErrText)
+		})
+	}
+}
+
+func TestLoadDefaultAccountRecoveryConfig(t *testing.T) {
+	resetViperWithJWTSecret(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.AccountRecovery.Enabled {
+		t.Fatal("account recovery must be disabled by default")
+	}
+	if cfg.AccountRecovery.IntervalSeconds != 60 || cfg.AccountRecovery.BaseBackoffSeconds != 60 || cfg.AccountRecovery.MaxBackoffSeconds != 1800 {
+		t.Fatalf("unexpected account recovery defaults: %+v", cfg.AccountRecovery)
+	}
+	if cfg.AccountRecovery.ProbeTimeoutSeconds != 90 || cfg.AccountRecovery.MaxWorkers != 2 {
+		t.Fatalf("unexpected account recovery probe defaults: %+v", cfg.AccountRecovery)
+	}
+}
+
+func TestLoadAccountRecoveryRequiresProbeModelWhenEnabled(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("ACCOUNT_RECOVERY_ENABLED", "true")
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "account_recovery.probe_model") {
+		t.Fatalf("Load() error = %v, want account_recovery.probe_model validation error", err)
+	}
+}
+
+func TestLoadAccountRecoveryConfigFromEnv(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("ACCOUNT_RECOVERY_ENABLED", "true")
+	t.Setenv("ACCOUNT_RECOVERY_PROBE_MODEL", "gpt-recovery")
+	t.Setenv("ACCOUNT_RECOVERY_INTERVAL_SECONDS", "30")
+	t.Setenv("ACCOUNT_RECOVERY_BASE_BACKOFF_SECONDS", "45")
+	t.Setenv("ACCOUNT_RECOVERY_MAX_BACKOFF_SECONDS", "900")
+	t.Setenv("ACCOUNT_RECOVERY_PROBE_TIMEOUT_SECONDS", "75")
+	t.Setenv("ACCOUNT_RECOVERY_MAX_WORKERS", "3")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if !cfg.AccountRecovery.Enabled || cfg.AccountRecovery.ProbeModel != "gpt-recovery" {
+		t.Fatalf("unexpected account recovery config: %+v", cfg.AccountRecovery)
+	}
+	if cfg.AccountRecovery.IntervalSeconds != 30 || cfg.AccountRecovery.BaseBackoffSeconds != 45 || cfg.AccountRecovery.MaxBackoffSeconds != 900 || cfg.AccountRecovery.ProbeTimeoutSeconds != 75 || cfg.AccountRecovery.MaxWorkers != 3 {
+		t.Fatalf("unexpected account recovery env config: %+v", cfg.AccountRecovery)
+	}
+}
+
 func TestLoadDefaultOpenAIFirstOutputTimeoutsDisabled(t *testing.T) {
 	resetViperWithJWTSecret(t)
 

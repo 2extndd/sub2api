@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 // marshalEvent marshals through the custom MarshalJSON and returns the decoded
@@ -151,6 +152,53 @@ func TestResponsesOutputUnmarshal_ToolSearchObjectArguments(t *testing.T) {
 	args, ok := decoded["arguments"].(map[string]any)
 	require.True(t, ok, "tool_search_call arguments must remain an object")
 	require.Equal(t, "gmail", args["query"])
+}
+
+func TestResponsesOutputUnmarshal_FunctionCallObjectArguments(t *testing.T) {
+	var item ResponsesOutput
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"type":"function_call",
+		"id":"item_1",
+		"call_id":"call_1",
+		"name":"exec_command",
+		"arguments":{"cmd":"echo hi","timeout":30}
+	}`), &item))
+	require.Equal(t, "function_call", item.Type)
+	require.JSONEq(t, `{"cmd":"echo hi","timeout":30}`, item.Arguments)
+
+	wire, err := json.Marshal(item)
+	require.NoError(t, err)
+	require.Equal(t, `{"cmd":"echo hi","timeout":30}`, gjson.GetBytes(wire, "arguments").String())
+}
+
+func TestResponsesResponseUnmarshal_FunctionCallObjectArguments(t *testing.T) {
+	var response ResponsesResponse
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"id":"response_1",
+		"object":"response",
+		"status":"completed",
+		"output":[{
+			"type":"function_call",
+			"id":"item_1",
+			"call_id":"call_1",
+			"name":"exec_command",
+			"arguments":{"cmd":"echo hi"}
+		}]
+	}`), &response))
+	require.Len(t, response.Output, 1)
+	require.JSONEq(t, `{"cmd":"echo hi"}`, response.Output[0].Arguments)
+}
+
+func TestResponsesStreamEventUnmarshal_TopLevelObjectArguments(t *testing.T) {
+	var event ResponsesStreamEvent
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"type":"response.function_call_arguments.done",
+		"item_id":"item_1",
+		"call_id":"call_1",
+		"name":"exec_command",
+		"arguments":{"cmd":"echo hi"}
+	}`), &event))
+	require.JSONEq(t, `{"cmd":"echo hi"}`, event.Arguments)
 }
 
 func TestResponsesResponseUnmarshal_ToolSearchObjectArguments(t *testing.T) {

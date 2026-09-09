@@ -83,8 +83,10 @@ export interface ChannelMonitor {
   updated_at: string
   /** Latest status of the primary model (empty when no history yet) */
   primary_status: MonitorStatus | ''
-  /** Latest latency of the primary model in ms (null when no history yet) */
+  /** Latest full-response latency of the primary model in ms. */
   primary_latency_ms: number | null
+  /** Primary model average time to first text token over the last 7 days. */
+  avg_first_token_7d_ms: number | null
   /** Primary model 7-day availability percentage (0-100) */
   availability_7d: number
   /** Latest status per extra model (used for hover tooltip) */
@@ -160,6 +162,7 @@ export interface CheckResult {
   model: string
   status: MonitorStatus
   latency_ms: number | null
+  first_token_ms: number | null
   ping_latency_ms: number | null
   message: string
   checked_at: string
@@ -176,6 +179,7 @@ export interface HistoryItem {
   model: string
   status: MonitorStatus
   latency_ms: number | null
+  first_token_ms: number | null
   ping_latency_ms: number | null
   message: string
   checked_at: string

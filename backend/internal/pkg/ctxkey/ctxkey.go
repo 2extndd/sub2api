@@ -8,6 +8,11 @@ const (
 	// ForcePlatform 强制平台（用于 /antigravity 路由），由 middleware.ForcePlatform 设置
 	ForcePlatform Key = "ctx_force_platform"
 
+	// DeniedAccountIDs contains administrator-configured upstream account exclusions
+	// for the authenticated Sub2API user. It must only be populated from trusted
+	// API-key authentication state, never from client request metadata.
+	DeniedAccountIDs Key = "ctx_denied_account_ids"
+
 	// ResolvedTargetPlatform 是 composite 分组按请求模型解析出的真实目标平台。
 	ResolvedTargetPlatform Key = "ctx_resolved_target_platform"
 

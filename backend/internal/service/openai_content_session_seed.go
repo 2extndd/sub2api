@@ -276,9 +276,77 @@ func deriveOpenAIStablePrefixSessionSeed(body []byte) string {
 		return ""
 	}
 
+	const (
+		stableToolsField = iota
+		stableFunctionsField
+		stableInstructionsField
+		stableSystemField
+		stableSystemInstructionField
+		stableMessagesField
+		stableInputField
+		stablePrefixFieldCount
+		allStablePrefixFields = 1<<stablePrefixFieldCount - 1
+	)
+	var fields [stablePrefixFieldCount]gjson.Result
+	var seen uint8
+
+	root := body
+	for i := 0; i < len(body); i++ {
+		switch body[i] {
+		case '{':
+			root = body[i:]
+			goto scanStablePrefixRoot
+		case '[':
+			return ""
+		}
+	}
+	return ""
+
+scanStablePrefixRoot:
+	nextKeyOffset := 1
+	parseRawJSONView(root).ForEach(func(key, value gjson.Result) bool {
+		if key.Index < nextKeyOffset || key.Index > len(root) {
+			return false
+		}
+		if bytes.IndexByte(root[nextKeyOffset:key.Index], '}') >= 0 {
+			return false
+		}
+		nextKeyOffset = value.Index + len(value.Raw)
+
+		field := -1
+		switch key.Str {
+		case "tools":
+			field = stableToolsField
+		case "functions":
+			field = stableFunctionsField
+		case "instructions":
+			field = stableInstructionsField
+		case "system":
+			field = stableSystemField
+		case "systemInstruction":
+			field = stableSystemInstructionField
+		case "messages":
+			field = stableMessagesField
+		case "input":
+			field = stableInputField
+		}
+		if field < 0 {
+			return true
+		}
+		mask := uint8(1 << field)
+		if seen&mask == 0 {
+			fields[field] = value
+			seen |= mask
+		}
+		return seen != allStablePrefixFields
+	})
+
 	var b strings.Builder
 	hasStablePrefix := false
 	appendJSON := func(label string, value gjson.Result) {
+		if value.Type == gjson.String && strings.TrimSpace(value.String()) == "" {
+			return
+		}
 		normalized, ok := normalizeNonEmptyCompatSeedJSON(value)
 		if !ok {
 			return
@@ -290,30 +358,24 @@ func deriveOpenAIStablePrefixSessionSeed(body []byte) string {
 		hasStablePrefix = true
 	}
 
-	if tools := gjson.GetBytes(body, "tools"); tools.Exists() && tools.IsArray() {
-		appendJSON("tools", tools)
-	}
-	if funcs := gjson.GetBytes(body, "functions"); funcs.Exists() && funcs.IsArray() {
-		appendJSON("functions", funcs)
-	}
-	if instructions := gjson.GetBytes(body, "instructions"); strings.TrimSpace(instructions.String()) != "" {
-		appendJSON("instructions", instructions)
-	}
+	appendJSON("tools", fields[stableToolsField])
+	appendJSON("functions", fields[stableFunctionsField])
+	appendJSON("instructions", fields[stableInstructionsField])
+	appendJSON("system", fields[stableSystemField])
+	appendJSON("system_instruction", fields[stableSystemInstructionField])
 
 	appendSystemMessages := func(items gjson.Result) {
 		items.ForEach(func(_, item gjson.Result) bool {
-			role := strings.TrimSpace(item.Get("role").String())
-			switch role {
+			switch strings.TrimSpace(item.Get("role").String()) {
 			case "system", "developer":
-				appendJSON(role, item.Get("content"))
+				appendJSON(strings.TrimSpace(item.Get("role").String()), item.Get("content"))
 			}
 			return true
 		})
 	}
-
-	if messages := gjson.GetBytes(body, "messages"); messages.Exists() && messages.IsArray() {
+	if messages := fields[stableMessagesField]; messages.Exists() && messages.IsArray() {
 		appendSystemMessages(messages)
-	} else if input := gjson.GetBytes(body, "input"); input.Exists() && input.IsArray() {
+	} else if input := fields[stableInputField]; input.Exists() && input.IsArray() {
 		appendSystemMessages(input)
 	}
 

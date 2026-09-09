@@ -360,6 +360,8 @@ type OpenAICompatibilityFallbackMetricsSnapshot struct {
 	SessionHashLegacyReadFallbackHit   int64   `json:"session_hash_legacy_read_fallback_hit"`
 	SessionHashLegacyDualWriteTotal    int64   `json:"session_hash_legacy_dual_write_total"`
 	SessionHashLegacyReadHitRate       float64 `json:"session_hash_legacy_read_hit_rate"`
+	PromptCacheStablePrefixTotal       int64   `json:"prompt_cache_stable_prefix_total"`
+	PromptCacheAnchoredFallbackTotal   int64   `json:"prompt_cache_anchored_fallback_total"`
 
 	MetadataLegacyFallbackIsMaxTokensOneHaikuTotal int64 `json:"metadata_legacy_fallback_is_max_tokens_one_haiku_total"`
 	MetadataLegacyFallbackThinkingEnabledTotal     int64 `json:"metadata_legacy_fallback_thinking_enabled_total"`
@@ -1021,6 +1023,7 @@ func (s *OpenAIGatewayService) SnapshotOpenAIWSRetryMetrics() OpenAIWSRetryMetri
 
 func SnapshotOpenAICompatibilityFallbackMetrics() OpenAICompatibilityFallbackMetricsSnapshot {
 	legacyReadFallbackTotal, legacyReadFallbackHit, legacyDualWriteTotal := openAIStickyCompatStats()
+	stablePrefixTotal, anchoredFallbackTotal := openAIPromptCacheAffinityStats()
 	isMaxTokensOneHaiku, thinkingEnabled, prefetchedStickyAccount, prefetchedStickyGroup, singleAccountRetry, accountSwitchCount := RequestMetadataFallbackStats()
 
 	readHitRate := float64(0)
@@ -1034,6 +1037,8 @@ func SnapshotOpenAICompatibilityFallbackMetrics() OpenAICompatibilityFallbackMet
 		SessionHashLegacyReadFallbackHit:   legacyReadFallbackHit,
 		SessionHashLegacyDualWriteTotal:    legacyDualWriteTotal,
 		SessionHashLegacyReadHitRate:       readHitRate,
+		PromptCacheStablePrefixTotal:       stablePrefixTotal,
+		PromptCacheAnchoredFallbackTotal:   anchoredFallbackTotal,
 
 		MetadataLegacyFallbackIsMaxTokensOneHaikuTotal: isMaxTokensOneHaiku,
 		MetadataLegacyFallbackThinkingEnabledTotal:     thinkingEnabled,

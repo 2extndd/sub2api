@@ -336,6 +336,7 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 		return false, nil
 	}
 
+	applyAccountUsageBillingMultiplier(p.Cost, usageLog, p.Account)
 	cmd := buildUsageBillingCommand(requestID, usageLog, p)
 	if cmd == nil || cmd.RequestID == "" || repo == nil {
 		postUsageBilling(ctx, p, deps)
@@ -532,9 +533,28 @@ func detachStreamUpstreamContext(ctx context.Context, stream bool) (context.Cont
 	return context.WithoutCancel(ctx), func() {}
 }
 
+type hedgeCancelableUpstreamContextKey struct{}
+
+// WithHedgeCancelableUpstreamContext opts one isolated hedge attempt into real
+// cancellation. Normal gateway forwarding remains detached so existing usage
+// drain behavior after client disconnect is unchanged.
+func WithHedgeCancelableUpstreamContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, hedgeCancelableUpstreamContextKey{}, true)
+}
+
 func detachUpstreamContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	if ctx == nil {
 		return context.Background(), func() {}
+	}
+	if cancelable, _ := ctx.Value(hedgeCancelableUpstreamContextKey{}).(bool); cancelable {
+		// The isolated attempt context is already owned and canceled by the hedge
+		// coordinator. Forwarding call sites historically invoke the returned
+		// cleanup immediately after constructing an HTTP request, so introducing
+		// another child context here would cancel the request before transport.Do.
+		return ctx, func() {}
 	}
 	return context.WithoutCancel(ctx), func() {}
 }

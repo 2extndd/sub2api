@@ -113,7 +113,9 @@ func (g *Group) ResolveMessagesDispatchModel(requestedModel string) string {
 }
 
 func sanitizeGroupMessagesDispatchFields(g *Group) {
-	if g == nil || g.Platform == PlatformOpenAI {
+	// Composite groups may deliberately expose the OpenAI-compatible Messages
+	// bridge alongside native Gemini/Grok endpoints through explicit routes.
+	if g == nil || g.Platform == PlatformOpenAI || g.Platform == PlatformComposite {
 		return
 	}
 	if g.Platform != PlatformComposite {

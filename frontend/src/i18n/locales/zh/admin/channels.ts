@@ -538,6 +538,7 @@ export default {
         primaryModel: '主模型',
         availability7d: '7 天可用率',
         latency: '延迟 (ms)',
+        avgTTFT7d: '7 天平均 TTFT (ms)',
         enabled: '启用',
         actions: '操作'
       },
@@ -587,6 +588,7 @@ export default {
         kindRequired: '请选择供应商'
       },
       runResultTitle: '检测结果',
+      ttft: 'TTFT',
       noMonitorsYet: '暂无监控',
       createFirstMonitor: '创建第一个监控来跟踪渠道可用性',
       advanced: {

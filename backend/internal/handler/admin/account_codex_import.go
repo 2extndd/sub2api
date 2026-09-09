@@ -31,6 +31,7 @@ type CodexSessionImportRequest struct {
 	Concurrency             *int           `json:"concurrency"`
 	Priority                *int           `json:"priority"`
 	RateMultiplier          *float64       `json:"rate_multiplier"`
+	UsageBillingMultiplier  *float64       `json:"usage_billing_multiplier"`
 	LoadFactor              *int           `json:"load_factor"`
 	ExpiresAt               *int64         `json:"expires_at"`
 	AutoPauseOnExpired      *bool          `json:"auto_pause_on_expired"`
@@ -135,6 +136,10 @@ func (h *AccountHandler) ImportCodexSession(c *gin.Context) {
 	}
 	if req.RateMultiplier != nil && *req.RateMultiplier < 0 {
 		response.BadRequest(c, "rate_multiplier must be >= 0")
+		return
+	}
+	if err := service.ValidateUsageBillingMultiplier(req.UsageBillingMultiplier); err != nil {
+		response.BadRequest(c, err.Error())
 		return
 	}
 	if req.LoadFactor != nil && *req.LoadFactor > 10000 {
@@ -277,14 +282,15 @@ func (h *AccountHandler) importCodexSessions(ctx context.Context, req CodexSessi
 			mergedCredentials := mergeCodexImportCredentials(existing.Credentials, credentials, item)
 			mergedExtra := mergeCodexImportMap(existing.Extra, extra)
 			updateInput := &service.UpdateAccountInput{
-				Credentials:        mergedCredentials,
-				Extra:              mergedExtra,
-				Concurrency:        req.Concurrency,
-				Priority:           req.Priority,
-				RateMultiplier:     req.RateMultiplier,
-				LoadFactor:         req.LoadFactor,
-				ExpiresAt:          effectiveExpiresAt,
-				AutoPauseOnExpired: autoPauseOnExpired,
+				Credentials:            mergedCredentials,
+				Extra:                  mergedExtra,
+				Concurrency:            req.Concurrency,
+				Priority:               req.Priority,
+				RateMultiplier:         req.RateMultiplier,
+				UsageBillingMultiplier: req.UsageBillingMultiplier,
+				LoadFactor:             req.LoadFactor,
+				ExpiresAt:              effectiveExpiresAt,
+				AutoPauseOnExpired:     autoPauseOnExpired,
 			}
 			if req.ProxyID != nil {
 				updateInput.ProxyID = req.ProxyID
@@ -329,22 +335,23 @@ func (h *AccountHandler) importCodexSessions(ctx context.Context, req CodexSessi
 		}
 
 		account, createErr := h.adminService.CreateAccount(ctx, &service.CreateAccountInput{
-			Name:                  accountName,
-			Notes:                 req.Notes,
-			Platform:              service.PlatformOpenAI,
-			Type:                  service.AccountTypeOAuth,
-			Credentials:           credentials,
-			Extra:                 extra,
-			ProxyID:               req.ProxyID,
-			Concurrency:           concurrency,
-			Priority:              priority,
-			RateMultiplier:        req.RateMultiplier,
-			LoadFactor:            req.LoadFactor,
-			GroupIDs:              req.GroupIDs,
-			ExpiresAt:             effectiveExpiresAt,
-			AutoPauseOnExpired:    autoPauseOnExpired,
-			SkipDefaultGroupBind:  skipDefaultGroupBind,
-			SkipMixedChannelCheck: skipMixedChannelCheck,
+			Name:                   accountName,
+			Notes:                  req.Notes,
+			Platform:               service.PlatformOpenAI,
+			Type:                   service.AccountTypeOAuth,
+			Credentials:            credentials,
+			Extra:                  extra,
+			ProxyID:                req.ProxyID,
+			Concurrency:            concurrency,
+			Priority:               priority,
+			RateMultiplier:         req.RateMultiplier,
+			UsageBillingMultiplier: req.UsageBillingMultiplier,
+			LoadFactor:             req.LoadFactor,
+			GroupIDs:               req.GroupIDs,
+			ExpiresAt:              effectiveExpiresAt,
+			AutoPauseOnExpired:     autoPauseOnExpired,
+			SkipDefaultGroupBind:   skipDefaultGroupBind,
+			SkipMixedChannelCheck:  skipMixedChannelCheck,
 		})
 		if createErr != nil {
 			result.Failed++

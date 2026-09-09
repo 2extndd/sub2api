@@ -538,6 +538,7 @@ export default {
         primaryModel: 'Primary Model',
         availability7d: '7d Availability',
         latency: 'Latency (ms)',
+        avgTTFT7d: '7d Avg TTFT (ms)',
         enabled: 'Enabled',
         actions: 'Actions'
       },
@@ -587,6 +588,7 @@ export default {
         kindRequired: 'Please select a provider'
       },
       runResultTitle: 'Check Result',
+      ttft: 'TTFT',
       noMonitorsYet: 'No monitors yet',
       createFirstMonitor: 'Create your first monitor to track channel availability',
       advanced: {

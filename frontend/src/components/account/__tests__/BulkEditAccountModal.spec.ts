@@ -98,6 +98,33 @@ describe('BulkEditAccountModal', () => {
     } as any)
   })
 
+  it('allows bulk updating account priority to zero', async () => {
+    const wrapper = mountModal()
+    await wrapper.get('#bulk-edit-priority-enabled').setValue(true)
+    const priorityInput = wrapper.get('#bulk-edit-priority')
+
+    expect(priorityInput.attributes('min')).toBe('0')
+    await priorityInput.setValue(0)
+    await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], { priority: 0 })
+  })
+
+  it('accepts 1.5 as a valid customer usage billing multiplier', async () => {
+    const wrapper = mountModal({
+      selectedPlatforms: ['openai'],
+      selectedTypes: ['apikey']
+    })
+    const enabled = wrapper.get('#bulk-edit-usage-billing-multiplier-enabled')
+    const input = wrapper.get('#bulk-edit-usage-billing-multiplier')
+
+    expect(input.attributes('step')).toBe('any')
+    await enabled.setValue(true)
+    await input.setValue('1.5')
+    expect((input.element as HTMLInputElement).checkValidity()).toBe(true)
+  })
+
   it('批量修改倍率时提示自动同步账号需要先关闭同步', async () => {
     const wrapper = mountModal()
 

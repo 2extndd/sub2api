@@ -268,6 +268,27 @@ func (_u *AccountUpdate) AddRateMultiplier(v float64) *AccountUpdate {
 	return _u
 }
 
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (_u *AccountUpdate) SetUsageBillingMultiplier(v float64) *AccountUpdate {
+	_u.mutation.ResetUsageBillingMultiplier()
+	_u.mutation.SetUsageBillingMultiplier(v)
+	return _u
+}
+
+// SetNillableUsageBillingMultiplier sets the "usage_billing_multiplier" field if the given value is not nil.
+func (_u *AccountUpdate) SetNillableUsageBillingMultiplier(v *float64) *AccountUpdate {
+	if v != nil {
+		_u.SetUsageBillingMultiplier(*v)
+	}
+	return _u
+}
+
+// AddUsageBillingMultiplier adds value to the "usage_billing_multiplier" field.
+func (_u *AccountUpdate) AddUsageBillingMultiplier(v float64) *AccountUpdate {
+	_u.mutation.AddUsageBillingMultiplier(v)
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *AccountUpdate) SetStatus(v string) *AccountUpdate {
 	_u.mutation.SetStatus(v)
@@ -772,6 +793,11 @@ func (_u *AccountUpdate) check() error {
 			return &ValidationError{Name: "type", err: fmt.Errorf(`ent: validator failed for field "Account.type": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.UsageBillingMultiplier(); ok {
+		if err := account.UsageBillingMultiplierValidator(v); err != nil {
+			return &ValidationError{Name: "usage_billing_multiplier", err: fmt.Errorf(`ent: validator failed for field "Account.usage_billing_multiplier": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := account.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Account.status": %w`, err)}
@@ -867,6 +893,12 @@ func (_u *AccountUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedRateMultiplier(); ok {
 		_spec.AddField(account.FieldRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.UsageBillingMultiplier(); ok {
+		_spec.SetField(account.FieldUsageBillingMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedUsageBillingMultiplier(); ok {
+		_spec.AddField(account.FieldUsageBillingMultiplier, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(account.FieldStatus, field.TypeString, value)
@@ -1408,6 +1440,27 @@ func (_u *AccountUpdateOne) AddRateMultiplier(v float64) *AccountUpdateOne {
 	return _u
 }
 
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (_u *AccountUpdateOne) SetUsageBillingMultiplier(v float64) *AccountUpdateOne {
+	_u.mutation.ResetUsageBillingMultiplier()
+	_u.mutation.SetUsageBillingMultiplier(v)
+	return _u
+}
+
+// SetNillableUsageBillingMultiplier sets the "usage_billing_multiplier" field if the given value is not nil.
+func (_u *AccountUpdateOne) SetNillableUsageBillingMultiplier(v *float64) *AccountUpdateOne {
+	if v != nil {
+		_u.SetUsageBillingMultiplier(*v)
+	}
+	return _u
+}
+
+// AddUsageBillingMultiplier adds value to the "usage_billing_multiplier" field.
+func (_u *AccountUpdateOne) AddUsageBillingMultiplier(v float64) *AccountUpdateOne {
+	_u.mutation.AddUsageBillingMultiplier(v)
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *AccountUpdateOne) SetStatus(v string) *AccountUpdateOne {
 	_u.mutation.SetStatus(v)
@@ -1925,6 +1978,11 @@ func (_u *AccountUpdateOne) check() error {
 			return &ValidationError{Name: "type", err: fmt.Errorf(`ent: validator failed for field "Account.type": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.UsageBillingMultiplier(); ok {
+		if err := account.UsageBillingMultiplierValidator(v); err != nil {
+			return &ValidationError{Name: "usage_billing_multiplier", err: fmt.Errorf(`ent: validator failed for field "Account.usage_billing_multiplier": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := account.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Account.status": %w`, err)}
@@ -2037,6 +2095,12 @@ func (_u *AccountUpdateOne) sqlSave(ctx context.Context) (_node *Account, err er
 	}
 	if value, ok := _u.mutation.AddedRateMultiplier(); ok {
 		_spec.AddField(account.FieldRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.UsageBillingMultiplier(); ok {
+		_spec.SetField(account.FieldUsageBillingMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedUsageBillingMultiplier(); ok {
+		_spec.AddField(account.FieldUsageBillingMultiplier, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(account.FieldStatus, field.TypeString, value)

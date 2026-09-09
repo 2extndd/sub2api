@@ -1561,7 +1561,7 @@
           <input
             v-model.number="form.priority"
             type="number"
-            min="1"
+            min="0"
             class="input"
             data-tour="account-form-priority"
           />
@@ -1606,6 +1606,19 @@
               @update:model-value="handleUpstreamBillingRateSyncChange"
             />
           </div>
+        </div>
+        <div>
+          <label class="input-label">{{ t('admin.accounts.usageBillingMultiplier') }}</label>
+          <input
+            v-model.number="form.usage_billing_multiplier"
+            type="number"
+            min="0.0000000001"
+            max="1000000"
+            step="any"
+            class="input"
+            data-testid="usage-billing-multiplier"
+          />
+          <p class="input-hint">{{ t('admin.accounts.usageBillingMultiplierHint') }}</p>
         </div>
       </div>
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
@@ -1794,6 +1807,30 @@
           {{ t('admin.accounts.openai.responsesModeTextDisabledHint') }}
         </div>
         <div>
+          <div class="input-label mb-2 flex items-center justify-between">
+            <span>{{ t('admin.accounts.openai.imageGenerationOnly') }}</span>
+            <button
+              type="button"
+              role="switch"
+              :aria-checked="imageGenerationOnlyMode"
+              @click="imageGenerationOnlyMode = !imageGenerationOnlyMode"
+              :class="[
+                'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+                imageGenerationOnlyMode ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+              ]"
+              data-testid="image-generation-only-toggle"
+            >
+              <span
+                :class="[
+                  'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                  imageGenerationOnlyMode ? 'translate-x-5' : 'translate-x-0'
+                ]"
+              />
+            </button>
+          </div>
+          <p class="input-hint">{{ t('admin.accounts.openai.imageGenerationOnlyDesc') }}</p>
+        </div>
+        <div>
           <label class="input-label mb-2 block">{{ t('admin.accounts.openai.endpointCapabilities') }}</label>
           <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <label
@@ -1806,6 +1843,7 @@
                 class="rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-500"
                 :data-testid="`openai-endpoint-capability-${option.value}`"
                 :checked="openAIEndpointCapabilities.includes(option.value)"
+                :disabled="imageGenerationOnlyMode"
                 @change="toggleOpenAIEndpointCapability(option.value, $event)"
               />
               <span class="text-gray-700 dark:text-gray-200">{{ option.label }}</span>
@@ -3430,16 +3468,32 @@ const openAITextEndpointCapabilityLabel = computed(() => {
 })
 const openAIEndpointCapabilityOptions = computed<{ value: OpenAIEndpointCapability; label: string }[]>(() => [
   { value: 'chat_completions', label: openAITextEndpointCapabilityLabel.value },
-  { value: 'embeddings', label: t('admin.accounts.openai.capabilityEmbeddings') }
+  { value: 'embeddings', label: t('admin.accounts.openai.capabilityEmbeddings') },
+  { value: 'images', label: t('admin.accounts.openai.capabilityImages') }
 ])
 const openAITextGenerationCapabilityEnabled = computed(() =>
   openAIEndpointCapabilities.value.includes('chat_completions')
 )
+const imageGenerationOnlyMode = computed({
+  get: () =>
+    openAIEndpointCapabilities.value.length === 1 &&
+    openAIEndpointCapabilities.value.includes('images'),
+  set: (enabled: boolean) => {
+    openAIEndpointCapabilities.value = enabled
+      ? ['images']
+      : ['chat_completions', 'embeddings']
+    if (enabled) {
+      openAIResponsesMode.value = 'auto'
+    }
+  }
+})
 
-const normalizeOpenAIEndpointCapabilities = (values: OpenAIEndpointCapability[]) => {
-  const allowed: OpenAIEndpointCapability[] = ['chat_completions', 'embeddings']
+const normalizeOpenAIEndpointCapabilities = (
+  values: OpenAIEndpointCapability[]
+): OpenAIEndpointCapability[] => {
+  const allowed: OpenAIEndpointCapability[] = ['chat_completions', 'embeddings', 'images']
   const selected = allowed.filter((value) => values.includes(value))
-  return selected.length > 0 ? selected : allowed
+  return selected.length > 0 ? selected : ['chat_completions', 'embeddings']
 }
 
 const readOpenAIEndpointCapabilities = (credentials?: Record<string, unknown>): OpenAIEndpointCapability[] => {
@@ -3447,7 +3501,7 @@ const readOpenAIEndpointCapabilities = (credentials?: Record<string, unknown>): 
   if (Array.isArray(raw)) {
     return normalizeOpenAIEndpointCapabilities(
       raw.filter((value): value is OpenAIEndpointCapability =>
-        value === 'chat_completions' || value === 'embeddings'
+        value === 'chat_completions' || value === 'embeddings' || value === 'images'
       )
     )
   }
@@ -3485,12 +3539,15 @@ const toggleOpenAIEndpointCapability = (capability: OpenAIEndpointCapability, ev
 
 const applyOpenAIEndpointCapabilities = (credentials: Record<string, unknown>) => {
   const capabilities = normalizeOpenAIEndpointCapabilities(openAIEndpointCapabilities.value)
-  if (capabilities.length === 2) {
+  // Default text+embeddings: delete to preserve legacy semantics
+  if (capabilities.length === 2 && capabilities.includes('chat_completions') && capabilities.includes('embeddings')) {
     delete credentials.openai_capabilities
     return
   }
+  // Explicit: persist images or mixed combinations
   credentials.openai_capabilities = capabilities
 }
+
 const normalizeOpenAIResponsesMode = (mode: unknown): OpenAIResponsesMode => {
   if (mode === 'force_responses' || mode === 'force_chat_completions') {
     return mode
@@ -3594,6 +3651,7 @@ const form = reactive({
   load_factor: null as number | null,
   priority: 1,
   rate_multiplier: 1,
+  usage_billing_multiplier: 1,
   status: 'active' as 'active' | 'inactive' | 'error',
   group_ids: [] as number[],
   expires_at: null as number | null
@@ -3702,6 +3760,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   form.load_factor = newAccount.load_factor ?? null
   form.priority = newAccount.priority
   form.rate_multiplier = newAccount.rate_multiplier ?? 1
+  form.usage_billing_multiplier = newAccount.usage_billing_multiplier ?? 1
   form.status = (newAccount.status === 'active' || newAccount.status === 'inactive' || newAccount.status === 'error')
     ? newAccount.status
     : 'active'
@@ -4638,13 +4697,21 @@ const handleSubmit = async () => {
     appStore.showError(t('admin.accounts.pleaseSelectStatus'))
     return
   }
-	if (autoResetCreditEnabled.value) {
-		const thresholds = [autoResetCredit5hThreshold.value, autoResetCredit7dThreshold.value]
-		if (thresholds.some((value) => !Number.isFinite(value) || value < 0.1 || value > 100)) {
-			appStore.showError(t('admin.accounts.autoResetCredit.thresholdInvalid'))
-			return
-		}
-	}
+  if (
+    !Number.isFinite(form.usage_billing_multiplier) ||
+    form.usage_billing_multiplier <= 0 ||
+    form.usage_billing_multiplier > 1_000_000
+  ) {
+    appStore.showError(t('admin.accounts.usageBillingMultiplierInvalid'))
+    return
+  }
+  if (autoResetCreditEnabled.value) {
+    const thresholds = [autoResetCredit5hThreshold.value, autoResetCredit7dThreshold.value]
+    if (thresholds.some((value) => !Number.isFinite(value) || value < 0.1 || value > 100)) {
+      appStore.showError(t('admin.accounts.autoResetCredit.thresholdInvalid'))
+      return
+    }
+  }
 
   const updatePayload: Record<string, unknown> = { ...form }
   try {

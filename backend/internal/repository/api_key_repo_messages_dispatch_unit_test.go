@@ -41,6 +41,14 @@ func TestGroupEntityToService_PreservesMessagesDispatchModelConfig(t *testing.T)
 func TestAPIKeyRepository_GetByKeyForAuth_PreservesMessagesDispatchModelConfig_SQLite(t *testing.T) {
 	repo, client := newAPIKeyRepoSQLite(t)
 	ctx := context.Background()
+	_, err := repo.sql.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS user_account_denials (
+			user_id INTEGER NOT NULL,
+			account_id INTEGER NOT NULL,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (user_id, account_id)
+		)`)
+	require.NoError(t, err)
 	user := mustCreateAPIKeyRepoUser(t, ctx, client, "getbykey-auth-dispatch-unit@test.com")
 
 	group, err := client.Group.Create().

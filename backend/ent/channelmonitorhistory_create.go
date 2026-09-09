@@ -56,6 +56,20 @@ func (_c *ChannelMonitorHistoryCreate) SetNillableLatencyMs(v *int) *ChannelMoni
 	return _c
 }
 
+// SetFirstTokenMs sets the "first_token_ms" field.
+func (_c *ChannelMonitorHistoryCreate) SetFirstTokenMs(v int) *ChannelMonitorHistoryCreate {
+	_c.mutation.SetFirstTokenMs(v)
+	return _c
+}
+
+// SetNillableFirstTokenMs sets the "first_token_ms" field if the given value is not nil.
+func (_c *ChannelMonitorHistoryCreate) SetNillableFirstTokenMs(v *int) *ChannelMonitorHistoryCreate {
+	if v != nil {
+		_c.SetFirstTokenMs(*v)
+	}
+	return _c
+}
+
 // SetPingLatencyMs sets the "ping_latency_ms" field.
 func (_c *ChannelMonitorHistoryCreate) SetPingLatencyMs(v int) *ChannelMonitorHistoryCreate {
 	_c.mutation.SetPingLatencyMs(v)
@@ -225,6 +239,10 @@ func (_c *ChannelMonitorHistoryCreate) createSpec() (*ChannelMonitorHistory, *sq
 		_spec.SetField(channelmonitorhistory.FieldLatencyMs, field.TypeInt, value)
 		_node.LatencyMs = &value
 	}
+	if value, ok := _c.mutation.FirstTokenMs(); ok {
+		_spec.SetField(channelmonitorhistory.FieldFirstTokenMs, field.TypeInt, value)
+		_node.FirstTokenMs = &value
+	}
 	if value, ok := _c.mutation.PingLatencyMs(); ok {
 		_spec.SetField(channelmonitorhistory.FieldPingLatencyMs, field.TypeInt, value)
 		_node.PingLatencyMs = &value
@@ -367,6 +385,30 @@ func (u *ChannelMonitorHistoryUpsert) AddLatencyMs(v int) *ChannelMonitorHistory
 // ClearLatencyMs clears the value of the "latency_ms" field.
 func (u *ChannelMonitorHistoryUpsert) ClearLatencyMs() *ChannelMonitorHistoryUpsert {
 	u.SetNull(channelmonitorhistory.FieldLatencyMs)
+	return u
+}
+
+// SetFirstTokenMs sets the "first_token_ms" field.
+func (u *ChannelMonitorHistoryUpsert) SetFirstTokenMs(v int) *ChannelMonitorHistoryUpsert {
+	u.Set(channelmonitorhistory.FieldFirstTokenMs, v)
+	return u
+}
+
+// UpdateFirstTokenMs sets the "first_token_ms" field to the value that was provided on create.
+func (u *ChannelMonitorHistoryUpsert) UpdateFirstTokenMs() *ChannelMonitorHistoryUpsert {
+	u.SetExcluded(channelmonitorhistory.FieldFirstTokenMs)
+	return u
+}
+
+// AddFirstTokenMs adds v to the "first_token_ms" field.
+func (u *ChannelMonitorHistoryUpsert) AddFirstTokenMs(v int) *ChannelMonitorHistoryUpsert {
+	u.Add(channelmonitorhistory.FieldFirstTokenMs, v)
+	return u
+}
+
+// ClearFirstTokenMs clears the value of the "first_token_ms" field.
+func (u *ChannelMonitorHistoryUpsert) ClearFirstTokenMs() *ChannelMonitorHistoryUpsert {
+	u.SetNull(channelmonitorhistory.FieldFirstTokenMs)
 	return u
 }
 
@@ -549,6 +591,34 @@ func (u *ChannelMonitorHistoryUpsertOne) UpdateLatencyMs() *ChannelMonitorHistor
 func (u *ChannelMonitorHistoryUpsertOne) ClearLatencyMs() *ChannelMonitorHistoryUpsertOne {
 	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
 		s.ClearLatencyMs()
+	})
+}
+
+// SetFirstTokenMs sets the "first_token_ms" field.
+func (u *ChannelMonitorHistoryUpsertOne) SetFirstTokenMs(v int) *ChannelMonitorHistoryUpsertOne {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.SetFirstTokenMs(v)
+	})
+}
+
+// AddFirstTokenMs adds v to the "first_token_ms" field.
+func (u *ChannelMonitorHistoryUpsertOne) AddFirstTokenMs(v int) *ChannelMonitorHistoryUpsertOne {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.AddFirstTokenMs(v)
+	})
+}
+
+// UpdateFirstTokenMs sets the "first_token_ms" field to the value that was provided on create.
+func (u *ChannelMonitorHistoryUpsertOne) UpdateFirstTokenMs() *ChannelMonitorHistoryUpsertOne {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.UpdateFirstTokenMs()
+	})
+}
+
+// ClearFirstTokenMs clears the value of the "first_token_ms" field.
+func (u *ChannelMonitorHistoryUpsertOne) ClearFirstTokenMs() *ChannelMonitorHistoryUpsertOne {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.ClearFirstTokenMs()
 	})
 }
 
@@ -907,6 +977,34 @@ func (u *ChannelMonitorHistoryUpsertBulk) UpdateLatencyMs() *ChannelMonitorHisto
 func (u *ChannelMonitorHistoryUpsertBulk) ClearLatencyMs() *ChannelMonitorHistoryUpsertBulk {
 	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
 		s.ClearLatencyMs()
+	})
+}
+
+// SetFirstTokenMs sets the "first_token_ms" field.
+func (u *ChannelMonitorHistoryUpsertBulk) SetFirstTokenMs(v int) *ChannelMonitorHistoryUpsertBulk {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.SetFirstTokenMs(v)
+	})
+}
+
+// AddFirstTokenMs adds v to the "first_token_ms" field.
+func (u *ChannelMonitorHistoryUpsertBulk) AddFirstTokenMs(v int) *ChannelMonitorHistoryUpsertBulk {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.AddFirstTokenMs(v)
+	})
+}
+
+// UpdateFirstTokenMs sets the "first_token_ms" field to the value that was provided on create.
+func (u *ChannelMonitorHistoryUpsertBulk) UpdateFirstTokenMs() *ChannelMonitorHistoryUpsertBulk {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.UpdateFirstTokenMs()
+	})
+}
+
+// ClearFirstTokenMs clears the value of the "first_token_ms" field.
+func (u *ChannelMonitorHistoryUpsertBulk) ClearFirstTokenMs() *ChannelMonitorHistoryUpsertBulk {
+	return u.Update(func(s *ChannelMonitorHistoryUpsert) {
+		s.ClearFirstTokenMs()
 	})
 }
 

@@ -117,6 +117,9 @@ func TestProfitControl_ResponsesCapabilityUsesTextGateAtScheduler(t *testing.T) 
 	expensive.Status = StatusActive
 	expensive.Schedulable = true
 	expensive.Concurrency = 2
+	expensive.Credentials = map[string]any{
+		openAIEndpointCapabilitiesCredentialKey: []any{"chat_completions", "images"},
+	}
 	svc := &OpenAIGatewayService{
 		accountRepo:        stubOpenAIAccountRepo{accounts: []Account{*expensive}},
 		cfg:                &config.Config{},

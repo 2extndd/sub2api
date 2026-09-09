@@ -96,6 +96,10 @@
             <span class="text-sm text-gray-900 dark:text-gray-100">{{ formatLatency(row.primary_latency_ms) }}</span>
           </template>
 
+          <template #cell-avg_ttft_7d="{ row }">
+            <span class="text-sm text-gray-900 dark:text-gray-100">{{ formatLatency(row.avg_first_token_7d_ms) }}</span>
+          </template>
+
           <template #cell-enabled="{ row }">
             <Toggle :modelValue="row.enabled" @update:modelValue="toggleEnabled(row)" />
           </template>
@@ -240,6 +244,7 @@ const columns = computed<Column[]>(() => [
   { key: 'primary_model', label: t('admin.channelMonitor.columns.primaryModel'), sortable: false },
   { key: 'availability_7d', label: t('admin.channelMonitor.columns.availability7d'), sortable: false },
   { key: 'latency', label: t('admin.channelMonitor.columns.latency'), sortable: false },
+  { key: 'avg_ttft_7d', label: t('admin.channelMonitor.columns.avgTTFT7d'), sortable: false },
   { key: 'enabled', label: t('admin.channelMonitor.columns.enabled'), sortable: false },
   { key: 'actions', label: t('admin.channelMonitor.columns.actions'), sortable: false },
 ])

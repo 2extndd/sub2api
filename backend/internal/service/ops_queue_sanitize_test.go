@@ -16,6 +16,14 @@ func TestSanitizeOpsUpstreamErrorsForQueueBoundsAndRedacts(t *testing.T) {
 			UpstreamResponseBody: `{"authorization":"Bearer secret","message":"` + strings.Repeat("x", 10_000) + `"}`,
 			Message:              strings.Repeat("m", 3000),
 			Detail:               `{"api_key":"secret","detail":"` + strings.Repeat("y", 10_000) + `"}`,
+			FailureClass:         "retry_forever",
+			RetryDisposition:     "retry_forever",
+			NetworkErrorType:     "private-network-detail",
+			ProviderErrorType:    "provider-secret",
+			ProviderErrorCode:    "provider-secret-code",
+			RetryAfterSeconds:    99999,
+			TextCategory:         "provider-secret",
+			TextSignature:        "not-a-signature",
 		})
 	}
 
@@ -44,6 +52,15 @@ func TestSanitizeOpsUpstreamErrorsForQueueBoundsAndRedacts(t *testing.T) {
 		}
 		if strings.Contains(event.UpstreamResponseBody, "Bearer secret") || strings.Contains(event.Detail, `"secret"`) {
 			t.Fatal("credential material was not redacted")
+		}
+		if event.FailureClass != string(GatewayFailureUnknown) || event.RetryDisposition != string(GatewayRetryNone) {
+			t.Fatalf("failure taxonomy was not bounded: %+v", event)
+		}
+		if event.NetworkErrorType != GatewayNetworkUnknown || event.ProviderErrorType != "other" || event.ProviderErrorCode != "other" || event.RetryAfterSeconds != 0 {
+			t.Fatalf("diagnostic categories were not bounded: %+v", event)
+		}
+		if event.TextCategory != gatewayTextCategoryUnknown || event.TextSignature != "" {
+			t.Fatalf("text diagnostics were not bounded: %+v", event)
 		}
 	}
 }

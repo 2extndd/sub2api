@@ -23,7 +23,10 @@
           >
             {{ statusLabel(r.status) }}
           </span>
-          <span class="text-xs text-gray-500 dark:text-gray-400">{{ formatLatency(r.latency_ms) }} ms</span>
+          <div class="flex flex-col items-end text-xs text-gray-500 dark:text-gray-400">
+            <span>{{ formatLatency(r.latency_ms) }} ms</span>
+            <span>{{ t('admin.channelMonitor.ttft') }}: {{ formatLatency(r.first_token_ms) }}<span v-if="r.first_token_ms != null"> ms</span></span>
+          </div>
         </div>
       </div>
     </div>

@@ -893,6 +893,11 @@ func (s *OpenAIGatewayService) handleFailoverErrorResponsePassthrough(
 	reqModel, _, _ := extractOpenAIRequestMetaFromBody(requestBody)
 	canonicalModel := canonicalOpenAIAccountSchedulingModel(account, reqModel)
 	shouldDisable := s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, canonicalModel)
+	policy := ClassifyUpstreamHTTPFailure(resp.StatusCode, body, resp.Header)
+	if shouldDisable {
+		policy.Retry = GatewayRetryNextAccount
+	}
+	SetOpsFailurePolicy(c, policy)
 	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 		Platform:             account.Platform,
 		AccountID:            account.ID,

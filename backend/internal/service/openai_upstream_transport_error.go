@@ -3,10 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"net"
-	"net/http"
-	"strings"
-	"syscall"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -66,29 +62,7 @@ var persistentUpstreamTransportErrorMarkers = []string{
 //     "network is unreachable", "no such host") are kept as a cross-platform safety
 //     net even though the typed checks should cover them on modern Go+Linux.
 func classifyUpstreamTransportError(err error) upstreamTransportErrorClass {
-	if err == nil {
-		return upstreamTransportErrorClass{}
-	}
-
-	// — Typed checks (preferred) ——————————————————————————————————————————————
-	if errors.Is(err, syscall.ECONNREFUSED) ||
-		errors.Is(err, syscall.EHOSTUNREACH) ||
-		errors.Is(err, syscall.ENETUNREACH) {
-		return upstreamTransportErrorClass{Persistent: true}
-	}
-	var dnsErr *net.DNSError
-	if errors.As(err, &dnsErr) && dnsErr.IsNotFound {
-		return upstreamTransportErrorClass{Persistent: true}
-	}
-
-	// — String-marker fallback ————————————————————————————————————————————————
-	msg := strings.ToLower(err.Error())
-	for _, marker := range persistentUpstreamTransportErrorMarkers {
-		if strings.Contains(msg, marker) {
-			return upstreamTransportErrorClass{Persistent: true}
-		}
-	}
-	return upstreamTransportErrorClass{}
+	return upstreamTransportErrorClass{Persistent: ClassifyUpstreamTransportFailure(err).Persistent}
 }
 
 // handleOpenAIUpstreamTransportError handles a transport-level upstream failure
@@ -106,8 +80,10 @@ func classifyUpstreamTransportError(err error) upstreamTransportErrorClass {
 //
 // passthrough tags the Ops error event for the OpenAI passthrough forward path.
 func (s *OpenAIGatewayService) handleOpenAIUpstreamTransportError(ctx context.Context, c *gin.Context, account *Account, err error, passthrough bool) error {
+	policy := ClassifyUpstreamTransportFailure(err)
 	safeErr := sanitizeUpstreamErrorMessage(err.Error())
 	setOpsUpstreamError(c, 0, safeErr, "")
+	SetOpsFailurePolicy(c, policy)
 	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 		Platform:           account.Platform,
 		AccountID:          account.ID,
@@ -115,6 +91,9 @@ func (s *OpenAIGatewayService) handleOpenAIUpstreamTransportError(ctx context.Co
 		UpstreamStatusCode: 0,
 		Passthrough:        passthrough,
 		Kind:               "request_error",
+		Stage:              string(GatewayFailureStageInference),
+		Scope:              string(policy.Scope),
+		Reason:             string(policy.Class),
 		Message:            safeErr,
 	})
 
@@ -135,14 +114,11 @@ func (s *OpenAIGatewayService) handleOpenAIUpstreamTransportError(ctx context.Co
 		return err
 	}
 
-	if classifyUpstreamTransportError(err).Persistent {
+	if policy.Persistent {
 		s.tempUnscheduleOpenAITransportError(ctx, account, safeErr)
 	}
 
-	return &UpstreamFailoverError{
-		StatusCode:   http.StatusBadGateway,
-		ResponseBody: openAITransportFailoverBody,
-	}
+	return policy.NewFailoverError(openAITransportFailoverBody)
 }
 
 // tempUnscheduleOpenAITransportError marks an account temporarily unschedulable

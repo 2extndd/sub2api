@@ -238,7 +238,39 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 		}
 		return nil, err
 	}
-	return apiKeyEntityToService(m), nil
+	result := apiKeyEntityToService(m)
+	deniedAccountIDs, err := r.getDeniedAccountIDs(ctx, result.UserID)
+	if err != nil {
+		return nil, err
+	}
+	result.DeniedAccountIDs = deniedAccountIDs
+	return result, nil
+}
+
+func (r *apiKeyRepository) getDeniedAccountIDs(ctx context.Context, userID int64) ([]int64, error) {
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT d.account_id
+		FROM user_account_denials d
+		JOIN accounts a ON a.id = d.account_id
+		WHERE d.user_id = $1 AND a.deleted_at IS NULL
+		ORDER BY d.account_id`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("load API key owner account denials: %w", err)
+	}
+	defer rows.Close()
+
+	accountIDs := make([]int64, 0)
+	for rows.Next() {
+		var accountID int64
+		if err := rows.Scan(&accountID); err != nil {
+			return nil, fmt.Errorf("scan API key owner account denial: %w", err)
+		}
+		accountIDs = append(accountIDs, accountID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate API key owner account denials: %w", err)
+	}
+	return accountIDs, nil
 }
 
 func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey, fields service.APIKeyUpdateFields) error {

@@ -582,6 +582,27 @@ func (_u *UsageLogUpdate) AddRateMultiplier(v float64) *UsageLogUpdate {
 	return _u
 }
 
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (_u *UsageLogUpdate) SetUsageBillingMultiplier(v float64) *UsageLogUpdate {
+	_u.mutation.ResetUsageBillingMultiplier()
+	_u.mutation.SetUsageBillingMultiplier(v)
+	return _u
+}
+
+// SetNillableUsageBillingMultiplier sets the "usage_billing_multiplier" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableUsageBillingMultiplier(v *float64) *UsageLogUpdate {
+	if v != nil {
+		_u.SetUsageBillingMultiplier(*v)
+	}
+	return _u
+}
+
+// AddUsageBillingMultiplier adds value to the "usage_billing_multiplier" field.
+func (_u *UsageLogUpdate) AddUsageBillingMultiplier(v float64) *UsageLogUpdate {
+	_u.mutation.AddUsageBillingMultiplier(v)
+	return _u
+}
+
 // SetLongContextBillingApplied sets the "long_context_billing_applied" field.
 func (_u *UsageLogUpdate) SetLongContextBillingApplied(v bool) *UsageLogUpdate {
 	_u.mutation.SetLongContextBillingApplied(v)
@@ -1076,6 +1097,11 @@ func (_u *UsageLogUpdate) check() error {
 			return &ValidationError{Name: "billing_mode", err: fmt.Errorf(`ent: validator failed for field "UsageLog.billing_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.UsageBillingMultiplier(); ok {
+		if err := usagelog.UsageBillingMultiplierValidator(v); err != nil {
+			return &ValidationError{Name: "usage_billing_multiplier", err: fmt.Errorf(`ent: validator failed for field "UsageLog.usage_billing_multiplier": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.UserAgent(); ok {
 		if err := usagelog.UserAgentValidator(v); err != nil {
 			return &ValidationError{Name: "user_agent", err: fmt.Errorf(`ent: validator failed for field "UsageLog.user_agent": %w`, err)}
@@ -1269,6 +1295,12 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedRateMultiplier(); ok {
 		_spec.AddField(usagelog.FieldRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.UsageBillingMultiplier(); ok {
+		_spec.SetField(usagelog.FieldUsageBillingMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedUsageBillingMultiplier(); ok {
+		_spec.AddField(usagelog.FieldUsageBillingMultiplier, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.LongContextBillingApplied(); ok {
 		_spec.SetField(usagelog.FieldLongContextBillingApplied, field.TypeBool, value)
@@ -2096,6 +2128,27 @@ func (_u *UsageLogUpdateOne) AddRateMultiplier(v float64) *UsageLogUpdateOne {
 	return _u
 }
 
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (_u *UsageLogUpdateOne) SetUsageBillingMultiplier(v float64) *UsageLogUpdateOne {
+	_u.mutation.ResetUsageBillingMultiplier()
+	_u.mutation.SetUsageBillingMultiplier(v)
+	return _u
+}
+
+// SetNillableUsageBillingMultiplier sets the "usage_billing_multiplier" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableUsageBillingMultiplier(v *float64) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetUsageBillingMultiplier(*v)
+	}
+	return _u
+}
+
+// AddUsageBillingMultiplier adds value to the "usage_billing_multiplier" field.
+func (_u *UsageLogUpdateOne) AddUsageBillingMultiplier(v float64) *UsageLogUpdateOne {
+	_u.mutation.AddUsageBillingMultiplier(v)
+	return _u
+}
+
 // SetLongContextBillingApplied sets the "long_context_billing_applied" field.
 func (_u *UsageLogUpdateOne) SetLongContextBillingApplied(v bool) *UsageLogUpdateOne {
 	_u.mutation.SetLongContextBillingApplied(v)
@@ -2603,6 +2656,11 @@ func (_u *UsageLogUpdateOne) check() error {
 			return &ValidationError{Name: "billing_mode", err: fmt.Errorf(`ent: validator failed for field "UsageLog.billing_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.UsageBillingMultiplier(); ok {
+		if err := usagelog.UsageBillingMultiplierValidator(v); err != nil {
+			return &ValidationError{Name: "usage_billing_multiplier", err: fmt.Errorf(`ent: validator failed for field "UsageLog.usage_billing_multiplier": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.UserAgent(); ok {
 		if err := usagelog.UserAgentValidator(v); err != nil {
 			return &ValidationError{Name: "user_agent", err: fmt.Errorf(`ent: validator failed for field "UsageLog.user_agent": %w`, err)}
@@ -2813,6 +2871,12 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if value, ok := _u.mutation.AddedRateMultiplier(); ok {
 		_spec.AddField(usagelog.FieldRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.UsageBillingMultiplier(); ok {
+		_spec.SetField(usagelog.FieldUsageBillingMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedUsageBillingMultiplier(); ok {
+		_spec.AddField(usagelog.FieldUsageBillingMultiplier, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.LongContextBillingApplied(); ok {
 		_spec.SetField(usagelog.FieldLongContextBillingApplied, field.TypeBool, value)

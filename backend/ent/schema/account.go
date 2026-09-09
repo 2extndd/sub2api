@@ -113,6 +113,13 @@ func (Account) Fields() []ent.Field {
 			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
 			Default(1.0),
 
+		// usage_billing_multiplier: 路由账号级用户扣费归一化倍率（>0）。
+		// 在分组倍率之后应用，只影响用户/API Key 最终扣费；不影响账号成本统计。
+		field.Float("usage_billing_multiplier").
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}).
+			Default(1.0).
+			Positive(),
+
 		// status: 账户状态，如 "active", "error", "disabled"
 		field.String("status").
 			MaxLen(20).

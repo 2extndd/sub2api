@@ -98,6 +98,7 @@ type BatchImagePricingSnapshot struct {
 	BaseUnitPrice           float64
 	GroupRateMultiplier     float64
 	AccountRateMultiplier   float64
+	UsageBillingMultiplier  float64
 	BatchDiscountMultiplier float64
 	HoldMultiplier          float64
 	BillableUnitPrice       float64
@@ -273,6 +274,7 @@ func (s *BatchImagePublicService) Submit(ctx context.Context, owner BatchImageOw
 		BaseUnitPrice:           pricingSnapshot.BaseUnitPrice,
 		GroupRateMultiplier:     pricingSnapshot.GroupRateMultiplier,
 		AccountRateMultiplier:   pricingSnapshot.AccountRateMultiplier,
+		UsageBillingMultiplier:  pricingSnapshot.UsageBillingMultiplier,
 		BatchDiscountMultiplier: pricingSnapshot.BatchDiscountMultiplier,
 		HoldMultiplier:          pricingSnapshot.HoldMultiplier,
 		BillableUnitPrice:       pricingSnapshot.BillableUnitPrice,
@@ -626,6 +628,7 @@ func (s *BatchImagePublicService) ListModels(ctx context.Context, owner BatchIma
 	}
 
 	modelsByProvider := make(map[string]map[string]struct{})
+	deniedAccountIDs := mergeAccountDenialsFromContext(ctx, nil)
 	for _, providerName := range batchImageProviderSelectionOrder("") {
 		provider, ok := s.ProviderRegistry.Get(providerName)
 		if !ok || provider == nil {
@@ -637,6 +640,9 @@ func (s *BatchImagePublicService) ListModels(ctx context.Context, owner BatchIma
 		}
 		for i := range accounts {
 			account := accounts[i]
+			if _, denied := deniedAccountIDs[account.ID]; denied {
+				continue
+			}
 			if !account.IsSchedulable() || !provider.SupportsAccount(&account) {
 				continue
 			}
@@ -935,6 +941,7 @@ func maxBatchImageReferenceImagesForModel(model string) int {
 
 func (s *BatchImagePublicService) selectProviderAndAccount(ctx context.Context, owner BatchImageOwner, requestedProvider, model string) (BatchImageProvider, *Account, error) {
 	providers := batchImageProviderSelectionOrder(requestedProvider)
+	deniedAccountIDs := mergeAccountDenialsFromContext(ctx, nil)
 	for _, providerName := range providers {
 		provider, ok := s.ProviderRegistry.Get(providerName)
 		if !ok || provider == nil {
@@ -952,6 +959,9 @@ func (s *BatchImagePublicService) selectProviderAndAccount(ctx context.Context, 
 		})
 		for i := range accounts {
 			account := accounts[i]
+			if _, denied := deniedAccountIDs[account.ID]; denied {
+				continue
+			}
 			if !account.IsSchedulable() || !account.IsModelSupported(model) {
 				continue
 			}
@@ -1064,20 +1074,22 @@ func (s *BatchImagePublicService) resolvePricingSnapshot(ctx context.Context, ow
 		)
 		holdMultiplier = discountMultiplier
 	}
-	accountMultiplier := 1.0
+	accountRateMultiplier := 1.0
 	if account != nil {
-		accountMultiplier = account.BillingRateMultiplier()
+		accountRateMultiplier = account.BillingRateMultiplier()
 	}
-	if accountMultiplier < 0 {
-		accountMultiplier = 0
+	if accountRateMultiplier < 0 {
+		accountRateMultiplier = 0
 	}
-	standardUnitPrice := unit * groupMultiplier * accountMultiplier
+	usageBillingMultiplier := account.EffectiveUsageBillingMultiplier()
+	standardUnitPrice := unit * groupMultiplier * usageBillingMultiplier
 	billableUnitPrice := standardUnitPrice * discountMultiplier
 	holdUnitPrice := standardUnitPrice * holdMultiplier
 	return &BatchImagePricingSnapshot{
 		BaseUnitPrice:           unit,
 		GroupRateMultiplier:     groupMultiplier,
-		AccountRateMultiplier:   accountMultiplier,
+		AccountRateMultiplier:   accountRateMultiplier,
+		UsageBillingMultiplier:  usageBillingMultiplier,
 		BatchDiscountMultiplier: discountMultiplier,
 		HoldMultiplier:          holdMultiplier,
 		BillableUnitPrice:       billableUnitPrice,

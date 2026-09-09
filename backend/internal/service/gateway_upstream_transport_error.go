@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"net/http"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -38,8 +37,10 @@ var gatewayTransportFailoverBody = []byte(`{"type":"error","error":{"type":"upst
 // It deliberately does NOT write to the response: the handler owns the
 // response (failover, or a protocol-correct error once failover is exhausted).
 func (s *GatewayService) handleUpstreamTransportError(ctx context.Context, c *gin.Context, account *Account, err error, event OpsUpstreamErrorEvent) error {
+	policy := ClassifyUpstreamTransportFailure(err)
 	safeErr := sanitizeUpstreamErrorMessage(err.Error())
 	setOpsUpstreamError(c, 0, safeErr, "")
+	SetOpsFailurePolicy(c, policy)
 	event.Platform = account.Platform
 	event.AccountID = account.ID
 	event.AccountName = account.Name
@@ -57,14 +58,11 @@ func (s *GatewayService) handleUpstreamTransportError(ctx context.Context, c *gi
 	// Transport attempt left local validation; count Ollama Cloud activity.
 	scheduleOllamaCloudUsageActivity(s.deferredService, account)
 
-	if classifyUpstreamTransportError(err).Persistent {
+	if policy.Persistent {
 		s.tempUnscheduleTransportError(ctx, account, safeErr)
 	}
 
-	return &UpstreamFailoverError{
-		StatusCode:   http.StatusBadGateway,
-		ResponseBody: gatewayTransportFailoverBody,
-	}
+	return policy.NewFailoverError(gatewayTransportFailoverBody)
 }
 
 // tempUnscheduleTransportError marks an account temporarily unschedulable

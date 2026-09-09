@@ -504,6 +504,7 @@ export default {
     latencyEmpty: '-',
     availabilityPrefix: '可用性',
     dialogLatency: '对话延迟',
+    avgTTFT7d: '7 天平均 TTFT',
     endpointPing: '端点 PING',
     history60pts: '近 {n} 次记录',
     nextUpdateIn: '{n}s 后刷新',
@@ -554,7 +555,8 @@ export default {
       availability7d: '7 天可用率',
       availability15d: '15 天可用率',
       availability30d: '30 天可用率',
-      avgLatency7d: '7 天平均延迟 (ms)'
+      avgLatency7d: '7 天平均延迟 (ms)',
+      avgTTFT7d: '7 天平均 TTFT (ms)'
     },
     empty: {
       title: '暂无可显示的渠道',

@@ -88,6 +88,7 @@ type Config struct {
 	RateLimit               RateLimitConfig               `mapstructure:"rate_limit"`
 	Pricing                 PricingConfig                 `mapstructure:"pricing"`
 	Gateway                 GatewayConfig                 `mapstructure:"gateway"`
+	AccountRecovery         AccountRecoveryConfig         `mapstructure:"account_recovery"`
 	APIKeyAuth              APIKeyAuthCacheConfig         `mapstructure:"api_key_auth_cache"`
 	SubscriptionCache       SubscriptionCacheConfig       `mapstructure:"subscription_cache"`
 	SubscriptionMaintenance SubscriptionMaintenanceConfig `mapstructure:"subscription_maintenance"`
@@ -944,6 +945,19 @@ const (
 	ImageConcurrencyOverflowModeWait   = "wait"
 )
 
+// AccountRecoveryConfig controls paid recovery probes for OpenAI API-key accounts
+// that are already in error state. Active accounts, including accounts manually
+// marked unschedulable, are never probed by this worker.
+type AccountRecoveryConfig struct {
+	Enabled             bool   `mapstructure:"enabled"`
+	IntervalSeconds     int    `mapstructure:"interval_seconds"`
+	BaseBackoffSeconds  int    `mapstructure:"base_backoff_seconds"`
+	MaxBackoffSeconds   int    `mapstructure:"max_backoff_seconds"`
+	ProbeTimeoutSeconds int    `mapstructure:"probe_timeout_seconds"`
+	MaxWorkers          int    `mapstructure:"max_workers"`
+	ProbeModel          string `mapstructure:"probe_model"`
+}
+
 // GatewayConfig API网关相关配置
 type GatewayConfig struct {
 	// 等待上游响应头的超时时间（秒），0表示无超时
@@ -1497,6 +1511,129 @@ type GatewaySchedulingConfig struct {
 	// 全量重建周期配置
 	// 全量重建周期（秒），0 表示禁用
 	FullRebuildIntervalSeconds int `mapstructure:"full_rebuild_interval_seconds"`
+
+	// OpenAI hedge coordination is wired but remains disabled by default. A
+	// separate zero-default canary gate bounds dispatch when enabled.
+	OpenAIHedge OpenAIHedgeConfig `mapstructure:"openai_hedge"`
+
+	// OpenAI 延迟健康影子模式配置
+	// 用于在不影响现有选择的前提下观察延迟指标
+	OpenAILatencyShadow OpenAILatencyShadowConfig `mapstructure:"openai_latency_shadow"`
+}
+
+const (
+	DefaultOpenAIHedgeStandardThresholdSeconds  = 25
+	DefaultOpenAIHedgeHighThresholdSeconds      = 40
+	DefaultOpenAIHedgeVeryHeavyThresholdSeconds = 60
+	DefaultOpenAIHedgeEventChannelCapacity      = 16
+	DefaultOpenAIHedgeMaxPrecommitEvents        = 128
+	DefaultOpenAIHedgeMaxPrecommitBytes         = 65536
+	DefaultOpenAIHedgeCancelDrainTimeoutSeconds = 5
+	DefaultOpenAIHedgeMaxDuplicateCostMicros    = 100000
+	MaximumOpenAIHedgeMaxDuplicateCostMicros    = 10000000
+	MaximumOpenAIHedgeCanaryBasisPoints         = 10000
+	MaximumOpenAIHedgeThresholdSeconds          = 5 * 60
+	MaximumOpenAIHedgeEventChannelCapacity      = 1024
+	MaximumOpenAIHedgeMaxPrecommitEvents        = 4096
+	MaximumOpenAIHedgeMaxPrecommitBytes         = 16 * 1024 * 1024
+	MaximumOpenAIHedgeCancelDrainTimeoutSeconds = 60
+)
+
+// OpenAIHedgeConfig owns the bounded coordinator and rollout policy. Enabled
+// remains false by default, and zero canary basis points allow decision shadow
+// without transferring a lease or dispatching a secondary attempt.
+type OpenAIHedgeConfig struct {
+	Enabled                   bool   `mapstructure:"enabled"`
+	CanaryBasisPoints         int    `mapstructure:"canary_basis_points"`
+	StandardThresholdSeconds  int    `mapstructure:"standard_threshold_seconds"`
+	HighThresholdSeconds      int    `mapstructure:"high_threshold_seconds"`
+	VeryHeavyThresholdSeconds int    `mapstructure:"very_heavy_threshold_seconds"`
+	VeryHeavyEnabled          bool   `mapstructure:"very_heavy_enabled"`
+	NoProgressEnabled         bool   `mapstructure:"no_progress_enabled"`
+	EventChannelCapacity      int    `mapstructure:"event_channel_capacity"`
+	MaxPrecommitEvents        int    `mapstructure:"max_precommit_events"`
+	MaxPrecommitBytes         int    `mapstructure:"max_precommit_bytes"`
+	CancelDrainTimeoutSeconds int    `mapstructure:"cancel_drain_timeout_seconds"`
+	MaxAttempts               int    `mapstructure:"max_attempts"`
+	MaxDuplicateCostMicros    uint64 `mapstructure:"max_duplicate_cost_micros"`
+}
+
+const (
+	DefaultOpenAILatencyShadowMaxTrackedAccounts          = 256
+	DefaultOpenAILatencyShadowMaxCohortsPerAccount        = 64
+	DefaultOpenAILatencyShadowMaxTracks                   = 8192
+	MaximumOpenAILatencyShadowTrackedAccounts             = 4096
+	MaximumOpenAILatencyShadowCohortsPerAccount           = 128
+	MaximumOpenAILatencyShadowTracks                      = 65536
+	DefaultOpenAILatencyShadowWeightFloor                 = 0.25
+	DefaultOpenAILatencyShadowQuarantineCap               = 3
+	DefaultOpenAILatencyShadowHardValidFloor              = 7
+	DefaultOpenAILatencyShadowIncidentWindowSeconds       = 90
+	DefaultOpenAILatencyShadowIncidentMinAffectedAccounts = 4
+	DefaultOpenAILatencyShadowIncidentMinAffectedFraction = 0.4
+	DefaultOpenAILatencyShadowPenalizedCooldownSeconds    = 30
+	DefaultOpenAILatencyShadowQuarantinedCooldownSeconds  = 120
+	DefaultOpenAILatencyShadowHardInvalidCooldownSeconds  = 300
+	DefaultOpenAILatencyShadowLatencyHalfLifeSeconds      = 1800
+	DefaultOpenAILatencyShadowErrorHalfLifeSeconds        = 900
+
+	DefaultOpenAILatencyShadowTelemetryFlushIntervalSeconds        = 5
+	DefaultOpenAILatencyShadowTelemetryBucketSeconds               = 60
+	DefaultOpenAILatencyShadowTelemetryFinalizationIntervalSeconds = 60
+	MaximumOpenAILatencyShadowTelemetryFinalizationIntervalSeconds = 15 * 60
+	DefaultOpenAILatencyShadowTelemetryFinalizationGraceSeconds    = 15
+	DefaultOpenAILatencyShadowTelemetrySourceTTLSeconds            = 30
+	DefaultOpenAILatencyShadowTelemetryRedisRawRetentionSeconds    = 2 * 60 * 60
+	DefaultOpenAILatencyShadowMaxTelemetryStreams                  = 8192
+	MaximumOpenAILatencyShadowMaxTelemetryStreams                  = 65536
+	DefaultOpenAILatencyShadowMaxTelemetryContributions            = 65536
+	MaximumOpenAILatencyShadowMaxTelemetryContributions            = 65536
+	DefaultOpenAILatencyShadowTelemetry15MinuteRetentionDays       = 30
+	DefaultOpenAILatencyShadowTelemetryHourlyRetentionDays         = 180
+)
+
+// OpenAILatencyShadowConfig defines bounded OpenAI latency-health observation
+// and its validated shadow-policy inputs. These values remain inert until a
+// later slice explicitly wires the service into account selection.
+type OpenAILatencyShadowConfig struct {
+	// Enabled defaults to false and does not affect account selection in T01/T02.
+	Enabled bool `mapstructure:"enabled"`
+	// Telemetry persistence remains inert while Enabled is false. Durations are
+	// integer seconds/days so configuration stays explicit and portable.
+	TelemetryFlushIntervalSeconds        int `mapstructure:"telemetry_flush_interval_seconds"`
+	TelemetryBucketSeconds               int `mapstructure:"telemetry_bucket_seconds"`
+	TelemetryFinalizationIntervalSeconds int `mapstructure:"telemetry_finalization_interval_seconds"`
+	TelemetryFinalizationGraceSeconds    int `mapstructure:"telemetry_finalization_grace_seconds"`
+	TelemetrySourceTTLSeconds            int `mapstructure:"telemetry_source_ttl_seconds"`
+	TelemetryRedisRawRetentionSeconds    int `mapstructure:"telemetry_redis_raw_retention_seconds"`
+	MaxTelemetryStreams                  int `mapstructure:"max_telemetry_streams"`
+	MaxTelemetryContributions            int `mapstructure:"max_telemetry_contributions"`
+	Telemetry15MinuteRetentionDays       int `mapstructure:"telemetry_15_minute_retention_days"`
+	TelemetryHourlyRetentionDays         int `mapstructure:"telemetry_hourly_retention_days"`
+	// MaxTrackedAccounts bounds all account and incident maps.
+	MaxTrackedAccounts int `mapstructure:"max_tracked_accounts"`
+	// MaxCohortsPerAccount bounds canonical cohorts before overflow aggregation.
+	MaxCohortsPerAccount int `mapstructure:"max_cohorts_per_account"`
+	// MaxTracks bounds aggregate, cohort, and pre-reserved overflow tracks globally.
+	MaxTracks int `mapstructure:"max_tracks"`
+	// WeightFloor is the minimum future scheduler multiplier; latency telemetry
+	// never directly hard-disables an account.
+	WeightFloor float64 `mapstructure:"weight_floor"`
+	// QuarantineCap and HardValidFloor are supplied with pool snapshots so local
+	// observations cannot violate global safety limits.
+	QuarantineCap  int `mapstructure:"quarantine_cap"`
+	HardValidFloor int `mapstructure:"hard_valid_floor"`
+	// Incident correlation uses distinct accounts inside this rolling window.
+	IncidentWindowSeconds       int     `mapstructure:"incident_window_seconds"`
+	IncidentMinAffectedAccounts int     `mapstructure:"incident_min_affected_accounts"`
+	IncidentMinAffectedFraction float64 `mapstructure:"incident_min_affected_fraction"`
+	// Cooldowns remain separately tunable for each health state.
+	PenalizedCooldownSeconds   int `mapstructure:"penalized_cooldown_seconds"`
+	QuarantinedCooldownSeconds int `mapstructure:"quarantined_cooldown_seconds"`
+	HardInvalidCooldownSeconds int `mapstructure:"hard_invalid_cooldown_seconds"`
+	// Half-lives govern observation-only exponentially decayed aggregates.
+	LatencyHalfLifeSeconds int `mapstructure:"latency_half_life_seconds"`
+	ErrorHalfLifeSeconds   int `mapstructure:"error_half_life_seconds"`
 }
 
 func (s *ServerConfig) Address() string {
@@ -2356,6 +2493,15 @@ func setDefaults() {
 	viper.SetDefault("idempotency.cleanup_interval_seconds", 60)
 	viper.SetDefault("idempotency.cleanup_batch_size", 500)
 
+	// Error-only account recovery. Disabled by default because probes consume upstream usage.
+	viper.SetDefault("account_recovery.enabled", false)
+	viper.SetDefault("account_recovery.interval_seconds", 60)
+	viper.SetDefault("account_recovery.base_backoff_seconds", 60)
+	viper.SetDefault("account_recovery.max_backoff_seconds", 1800)
+	viper.SetDefault("account_recovery.probe_timeout_seconds", 90)
+	viper.SetDefault("account_recovery.max_workers", 2)
+	viper.SetDefault("account_recovery.probe_model", "")
+
 	// Gateway
 	viper.SetDefault("gateway.response_header_timeout", 600) // 600秒(10分钟)等待上游响应头，LLM高负载时可能排队较久
 	viper.SetDefault("gateway.openai_response_header_timeout", 0)
@@ -2493,6 +2639,53 @@ func setDefaults() {
 	viper.SetDefault("gateway.scheduling.load_batch_cache_ttl_ms", 200)
 	viper.SetDefault("gateway.scheduling.snapshot_mget_chunk_size", 128)
 	viper.SetDefault("gateway.scheduling.snapshot_write_chunk_size", 256)
+	viper.SetDefault("gateway.scheduling.openai_hedge.enabled", false)
+	viper.SetDefault("gateway.scheduling.openai_hedge.canary_basis_points", 0)
+	viper.SetDefault("gateway.scheduling.openai_hedge.standard_threshold_seconds", DefaultOpenAIHedgeStandardThresholdSeconds)
+	viper.SetDefault("gateway.scheduling.openai_hedge.high_threshold_seconds", DefaultOpenAIHedgeHighThresholdSeconds)
+	viper.SetDefault("gateway.scheduling.openai_hedge.very_heavy_threshold_seconds", DefaultOpenAIHedgeVeryHeavyThresholdSeconds)
+	viper.SetDefault("gateway.scheduling.openai_hedge.very_heavy_enabled", false)
+	viper.SetDefault("gateway.scheduling.openai_hedge.no_progress_enabled", false)
+	viper.SetDefault("gateway.scheduling.openai_hedge.event_channel_capacity", DefaultOpenAIHedgeEventChannelCapacity)
+	viper.SetDefault("gateway.scheduling.openai_hedge.max_precommit_events", DefaultOpenAIHedgeMaxPrecommitEvents)
+	viper.SetDefault("gateway.scheduling.openai_hedge.max_precommit_bytes", DefaultOpenAIHedgeMaxPrecommitBytes)
+	viper.SetDefault("gateway.scheduling.openai_hedge.cancel_drain_timeout_seconds", DefaultOpenAIHedgeCancelDrainTimeoutSeconds)
+	viper.SetDefault("gateway.scheduling.openai_hedge.max_attempts", 2)
+	viper.SetDefault("gateway.scheduling.openai_hedge.max_duplicate_cost_micros", DefaultOpenAIHedgeMaxDuplicateCostMicros)
+	viper.SetDefault("gateway.scheduling.openai_latency_shadow.enabled", false)
+	viper.SetDefault("gateway.scheduling.openai_latency_shadow.telemetry_flush_interval_seconds", DefaultOpenAILatencyShadowTelemetryFlushIntervalSeconds)
+	viper.SetDefault("gateway.scheduling.openai_latency_shadow.telemetry_bucket_seconds", DefaultOpenAILatencyShadowTelemetryBucketSeconds)
+	viper.SetDefault("gateway.scheduling.openai_latency_shadow.telemetry_finalization_interval_seconds", DefaultOpenAILatencyShadowTelemetryFinalizationIntervalSeconds)
+	viper.SetDefault("gateway.scheduling.openai_latency_shadow.telemetry_finalization_grace_seconds", DefaultOpenAILatencyShadowTelemetryFinalizationGraceSeconds)
+	viper.SetDefault("gateway.scheduling.openai_latency_shadow.telemetry_source_ttl_seconds", DefaultOpenAILatencyShadowTelemetrySourceTTLSeconds)
+	viper.SetDefault("gateway.scheduling.openai_latency_shadow.telemetry_redis_raw_retention_seconds", DefaultOpenAILatencyShadowTelemetryRedisRawRetentionSeconds)
+	viper.SetDefault("gateway.scheduling.openai_latency_shadow.max_telemetry_streams", DefaultOpenAILatencyShadowMaxTelemetryStreams)
+	viper.SetDefault("gateway.scheduling.openai_latency_shadow.max_telemetry_contributions", DefaultOpenAILatencyShadowMaxTelemetryContributions)
+	viper.SetDefault("gateway.scheduling.openai_latency_shadow.telemetry_15_minute_retention_days", DefaultOpenAILatencyShadowTelemetry15MinuteRetentionDays)
+	viper.SetDefault("gateway.scheduling.openai_latency_shadow.telemetry_hourly_retention_days", DefaultOpenAILatencyShadowTelemetryHourlyRetentionDays)
+	viper.SetDefault(
+		"gateway.scheduling.openai_latency_shadow.max_tracked_accounts",
+		DefaultOpenAILatencyShadowMaxTrackedAccounts,
+	)
+	viper.SetDefault(
+		"gateway.scheduling.openai_latency_shadow.max_cohorts_per_account",
+		DefaultOpenAILatencyShadowMaxCohortsPerAccount,
+	)
+	viper.SetDefault(
+		"gateway.scheduling.openai_latency_shadow.max_tracks",
+		DefaultOpenAILatencyShadowMaxTracks,
+	)
+	viper.SetDefault("gateway.scheduling.openai_latency_shadow.weight_floor", DefaultOpenAILatencyShadowWeightFloor)
+	viper.SetDefault("gateway.scheduling.openai_latency_shadow.quarantine_cap", DefaultOpenAILatencyShadowQuarantineCap)
+	viper.SetDefault("gateway.scheduling.openai_latency_shadow.hard_valid_floor", DefaultOpenAILatencyShadowHardValidFloor)
+	viper.SetDefault("gateway.scheduling.openai_latency_shadow.incident_window_seconds", DefaultOpenAILatencyShadowIncidentWindowSeconds)
+	viper.SetDefault("gateway.scheduling.openai_latency_shadow.incident_min_affected_accounts", DefaultOpenAILatencyShadowIncidentMinAffectedAccounts)
+	viper.SetDefault("gateway.scheduling.openai_latency_shadow.incident_min_affected_fraction", DefaultOpenAILatencyShadowIncidentMinAffectedFraction)
+	viper.SetDefault("gateway.scheduling.openai_latency_shadow.penalized_cooldown_seconds", DefaultOpenAILatencyShadowPenalizedCooldownSeconds)
+	viper.SetDefault("gateway.scheduling.openai_latency_shadow.quarantined_cooldown_seconds", DefaultOpenAILatencyShadowQuarantinedCooldownSeconds)
+	viper.SetDefault("gateway.scheduling.openai_latency_shadow.hard_invalid_cooldown_seconds", DefaultOpenAILatencyShadowHardInvalidCooldownSeconds)
+	viper.SetDefault("gateway.scheduling.openai_latency_shadow.latency_half_life_seconds", DefaultOpenAILatencyShadowLatencyHalfLifeSeconds)
+	viper.SetDefault("gateway.scheduling.openai_latency_shadow.error_half_life_seconds", DefaultOpenAILatencyShadowErrorHalfLifeSeconds)
 	viper.SetDefault("gateway.scheduling.slot_cleanup_interval", 30*time.Second)
 	viper.SetDefault("gateway.scheduling.db_fallback_enabled", true)
 	viper.SetDefault("gateway.scheduling.db_fallback_timeout_seconds", 0)
@@ -2715,6 +2908,26 @@ func (c *Config) Validate() error {
 	// 选择 bytes 而不是 rune 计数，确保二进制/随机串的长度语义更接近“熵”而非“字符数”。
 	if len([]byte(jwtSecret)) < 32 {
 		return fmt.Errorf("jwt.secret must be at least 32 bytes")
+	}
+	if c.AccountRecovery.Enabled {
+		if strings.TrimSpace(c.AccountRecovery.ProbeModel) == "" {
+			return fmt.Errorf("account_recovery.probe_model is required when account recovery is enabled")
+		}
+		if c.AccountRecovery.IntervalSeconds <= 0 {
+			return fmt.Errorf("account_recovery.interval_seconds must be positive")
+		}
+		if c.AccountRecovery.BaseBackoffSeconds <= 0 {
+			return fmt.Errorf("account_recovery.base_backoff_seconds must be positive")
+		}
+		if c.AccountRecovery.MaxBackoffSeconds < c.AccountRecovery.BaseBackoffSeconds {
+			return fmt.Errorf("account_recovery.max_backoff_seconds must be greater than or equal to base_backoff_seconds")
+		}
+		if c.AccountRecovery.ProbeTimeoutSeconds <= 0 {
+			return fmt.Errorf("account_recovery.probe_timeout_seconds must be positive")
+		}
+		if c.AccountRecovery.MaxWorkers <= 0 {
+			return fmt.Errorf("account_recovery.max_workers must be positive")
+		}
 	}
 	switch c.Log.Level {
 	case "debug", "info", "warn", "error":
@@ -3634,6 +3847,211 @@ func (c *Config) Validate() error {
 	}
 	if c.Gateway.Scheduling.SnapshotWriteChunkSize <= 0 {
 		return fmt.Errorf("gateway.scheduling.snapshot_write_chunk_size must be positive")
+	}
+	hedge := c.Gateway.Scheduling.OpenAIHedge
+	if hedge.CanaryBasisPoints < 0 || hedge.CanaryBasisPoints > MaximumOpenAIHedgeCanaryBasisPoints {
+		return fmt.Errorf(
+			"gateway.scheduling.openai_hedge.canary_basis_points must be between 0 and %d",
+			MaximumOpenAIHedgeCanaryBasisPoints,
+		)
+	}
+	minimumHedgeValue := 0
+	if hedge.Enabled {
+		minimumHedgeValue = 1
+	}
+	hedgePositiveValues := []struct {
+		name    string
+		value   int
+		maximum int
+	}{
+		{"standard_threshold_seconds", hedge.StandardThresholdSeconds, MaximumOpenAIHedgeThresholdSeconds},
+		{"high_threshold_seconds", hedge.HighThresholdSeconds, MaximumOpenAIHedgeThresholdSeconds},
+		{"very_heavy_threshold_seconds", hedge.VeryHeavyThresholdSeconds, MaximumOpenAIHedgeThresholdSeconds},
+		{"event_channel_capacity", hedge.EventChannelCapacity, MaximumOpenAIHedgeEventChannelCapacity},
+		{"max_precommit_events", hedge.MaxPrecommitEvents, MaximumOpenAIHedgeMaxPrecommitEvents},
+		{"max_precommit_bytes", hedge.MaxPrecommitBytes, MaximumOpenAIHedgeMaxPrecommitBytes},
+		{"cancel_drain_timeout_seconds", hedge.CancelDrainTimeoutSeconds, MaximumOpenAIHedgeCancelDrainTimeoutSeconds},
+	}
+	for _, value := range hedgePositiveValues {
+		if value.value < minimumHedgeValue {
+			qualifier := "non-negative"
+			if hedge.Enabled {
+				qualifier = "positive when enabled"
+			}
+			return fmt.Errorf("gateway.scheduling.openai_hedge.%s must be %s", value.name, qualifier)
+		}
+		if value.value > value.maximum {
+			return fmt.Errorf("gateway.scheduling.openai_hedge.%s must not exceed %d", value.name, value.maximum)
+		}
+	}
+	if hedge.Enabled && hedge.MaxAttempts != 2 {
+		return fmt.Errorf("gateway.scheduling.openai_hedge.max_attempts must be exactly 2, got %d", hedge.MaxAttempts)
+	}
+	if hedge.MaxDuplicateCostMicros > MaximumOpenAIHedgeMaxDuplicateCostMicros {
+		return fmt.Errorf("gateway.scheduling.openai_hedge.max_duplicate_cost_micros must not exceed %d", MaximumOpenAIHedgeMaxDuplicateCostMicros)
+	}
+	if hedge.Enabled && hedge.MaxDuplicateCostMicros == 0 {
+		return fmt.Errorf("gateway.scheduling.openai_hedge.max_duplicate_cost_micros must be positive when enabled")
+	}
+	if hedge.StandardThresholdSeconds > hedge.HighThresholdSeconds {
+		return fmt.Errorf("gateway.scheduling.openai_hedge.high_threshold_seconds must be at least standard_threshold_seconds")
+	}
+	if hedge.HighThresholdSeconds > hedge.VeryHeavyThresholdSeconds {
+		return fmt.Errorf("gateway.scheduling.openai_hedge.very_heavy_threshold_seconds must be at least high_threshold_seconds")
+	}
+	if hedge.MaxPrecommitEvents > 0 && hedge.EventChannelCapacity > hedge.MaxPrecommitEvents {
+		return fmt.Errorf("gateway.scheduling.openai_hedge.max_precommit_events must be at least event_channel_capacity")
+	}
+	latencyShadow := c.Gateway.Scheduling.OpenAILatencyShadow
+	minimumTelemetryValue := 0
+	if latencyShadow.Enabled {
+		minimumTelemetryValue = 1
+	}
+	telemetryDurations := []struct {
+		name  string
+		value int
+	}{
+		{"telemetry_flush_interval_seconds", latencyShadow.TelemetryFlushIntervalSeconds},
+		{"telemetry_bucket_seconds", latencyShadow.TelemetryBucketSeconds},
+		{"telemetry_finalization_interval_seconds", latencyShadow.TelemetryFinalizationIntervalSeconds},
+		{"telemetry_finalization_grace_seconds", latencyShadow.TelemetryFinalizationGraceSeconds},
+		{"telemetry_source_ttl_seconds", latencyShadow.TelemetrySourceTTLSeconds},
+		{"telemetry_redis_raw_retention_seconds", latencyShadow.TelemetryRedisRawRetentionSeconds},
+		{"telemetry_15_minute_retention_days", latencyShadow.Telemetry15MinuteRetentionDays},
+		{"telemetry_hourly_retention_days", latencyShadow.TelemetryHourlyRetentionDays},
+	}
+	for _, telemetryDuration := range telemetryDurations {
+		if telemetryDuration.value < minimumTelemetryValue {
+			return fmt.Errorf(
+				"gateway.scheduling.openai_latency_shadow.%s must be at least %d",
+				telemetryDuration.name,
+				minimumTelemetryValue,
+			)
+		}
+	}
+	if latencyShadow.MaxTelemetryStreams < minimumTelemetryValue ||
+		latencyShadow.MaxTelemetryStreams > MaximumOpenAILatencyShadowMaxTelemetryStreams {
+		return fmt.Errorf(
+			"gateway.scheduling.openai_latency_shadow.max_telemetry_streams must be between %d and %d",
+			minimumTelemetryValue,
+			MaximumOpenAILatencyShadowMaxTelemetryStreams,
+		)
+	}
+	if latencyShadow.MaxTelemetryContributions < minimumTelemetryValue ||
+		latencyShadow.MaxTelemetryContributions > MaximumOpenAILatencyShadowMaxTelemetryContributions {
+		return fmt.Errorf(
+			"gateway.scheduling.openai_latency_shadow.max_telemetry_contributions must be between %d and %d",
+			minimumTelemetryValue,
+			MaximumOpenAILatencyShadowMaxTelemetryContributions,
+		)
+	}
+	if latencyShadow.Enabled {
+		if latencyShadow.TelemetryFlushIntervalSeconds > latencyShadow.TelemetryBucketSeconds {
+			return fmt.Errorf("gateway.scheduling.openai_latency_shadow.telemetry_flush_interval_seconds must not exceed telemetry_bucket_seconds")
+		}
+		if latencyShadow.TelemetryFinalizationIntervalSeconds < latencyShadow.TelemetryBucketSeconds {
+			return fmt.Errorf("gateway.scheduling.openai_latency_shadow.telemetry_finalization_interval_seconds must be at least telemetry_bucket_seconds")
+		}
+		if latencyShadow.TelemetryFinalizationIntervalSeconds > MaximumOpenAILatencyShadowTelemetryFinalizationIntervalSeconds {
+			return fmt.Errorf(
+				"gateway.scheduling.openai_latency_shadow.telemetry_finalization_interval_seconds must not exceed %d",
+				MaximumOpenAILatencyShadowTelemetryFinalizationIntervalSeconds,
+			)
+		}
+		if latencyShadow.TelemetrySourceTTLSeconds < latencyShadow.TelemetryFlushIntervalSeconds {
+			return fmt.Errorf("gateway.scheduling.openai_latency_shadow.telemetry_source_ttl_seconds must be at least telemetry_flush_interval_seconds")
+		}
+		minimumRawRetention := 60*60 +
+			latencyShadow.TelemetryFinalizationGraceSeconds + latencyShadow.TelemetrySourceTTLSeconds
+		if latencyShadow.TelemetryRedisRawRetentionSeconds < minimumRawRetention {
+			return fmt.Errorf(
+				"gateway.scheduling.openai_latency_shadow.telemetry_redis_raw_retention_seconds must be at least one hour + finalization grace + source TTL (%d seconds)",
+				minimumRawRetention,
+			)
+		}
+		if latencyShadow.TelemetryHourlyRetentionDays < latencyShadow.Telemetry15MinuteRetentionDays {
+			return fmt.Errorf("gateway.scheduling.openai_latency_shadow.telemetry_hourly_retention_days must be at least telemetry_15_minute_retention_days")
+		}
+	}
+	minimumLatencyCardinality := 0
+	if latencyShadow.Enabled {
+		minimumLatencyCardinality = 1
+	}
+	if latencyShadow.MaxTrackedAccounts < minimumLatencyCardinality ||
+		latencyShadow.MaxTrackedAccounts > MaximumOpenAILatencyShadowTrackedAccounts {
+		return fmt.Errorf(
+			"gateway.scheduling.openai_latency_shadow.max_tracked_accounts must be between %d and %d",
+			minimumLatencyCardinality,
+			MaximumOpenAILatencyShadowTrackedAccounts,
+		)
+	}
+	if latencyShadow.MaxCohortsPerAccount < minimumLatencyCardinality ||
+		latencyShadow.MaxCohortsPerAccount > MaximumOpenAILatencyShadowCohortsPerAccount {
+		return fmt.Errorf(
+			"gateway.scheduling.openai_latency_shadow.max_cohorts_per_account must be between %d and %d",
+			minimumLatencyCardinality,
+			MaximumOpenAILatencyShadowCohortsPerAccount,
+		)
+	}
+	if latencyShadow.MaxTracks < minimumLatencyCardinality ||
+		latencyShadow.MaxTracks > MaximumOpenAILatencyShadowTracks {
+		return fmt.Errorf(
+			"gateway.scheduling.openai_latency_shadow.max_tracks must be between %d and %d",
+			minimumLatencyCardinality,
+			MaximumOpenAILatencyShadowTracks,
+		)
+	}
+	if latencyShadow.Enabled && latencyShadow.MaxTracks < 2*latencyShadow.MaxTrackedAccounts {
+		return fmt.Errorf(
+			"gateway.scheduling.openai_latency_shadow.max_tracks must reserve aggregate and overflow tracks for every account (at least %d)",
+			2*latencyShadow.MaxTrackedAccounts,
+		)
+	}
+	minimumPositivePolicyValue := 0
+	if latencyShadow.Enabled {
+		minimumPositivePolicyValue = 1
+	}
+	if math.IsNaN(latencyShadow.WeightFloor) || math.IsInf(latencyShadow.WeightFloor, 0) ||
+		latencyShadow.WeightFloor > 1 ||
+		(latencyShadow.Enabled && latencyShadow.WeightFloor <= 0) ||
+		(!latencyShadow.Enabled && latencyShadow.WeightFloor < 0) {
+		return fmt.Errorf("gateway.scheduling.openai_latency_shadow.weight_floor must be finite and in (0, 1] when enabled")
+	}
+	if latencyShadow.QuarantineCap < 0 {
+		return fmt.Errorf("gateway.scheduling.openai_latency_shadow.quarantine_cap must be non-negative")
+	}
+	if latencyShadow.HardValidFloor < 0 {
+		return fmt.Errorf("gateway.scheduling.openai_latency_shadow.hard_valid_floor must be non-negative")
+	}
+	if latencyShadow.IncidentWindowSeconds < minimumPositivePolicyValue {
+		return fmt.Errorf("gateway.scheduling.openai_latency_shadow.incident_window_seconds must be positive when enabled")
+	}
+	if latencyShadow.IncidentMinAffectedAccounts < minimumPositivePolicyValue {
+		return fmt.Errorf("gateway.scheduling.openai_latency_shadow.incident_min_affected_accounts must be positive when enabled")
+	}
+	if math.IsNaN(latencyShadow.IncidentMinAffectedFraction) || math.IsInf(latencyShadow.IncidentMinAffectedFraction, 0) ||
+		latencyShadow.IncidentMinAffectedFraction > 1 ||
+		(latencyShadow.Enabled && latencyShadow.IncidentMinAffectedFraction <= 0) ||
+		(!latencyShadow.Enabled && latencyShadow.IncidentMinAffectedFraction < 0) {
+		return fmt.Errorf("gateway.scheduling.openai_latency_shadow.incident_min_affected_fraction must be finite and in (0, 1] when enabled")
+	}
+	policyDurations := []struct {
+		name  string
+		value int
+	}{
+		{"penalized_cooldown_seconds", latencyShadow.PenalizedCooldownSeconds},
+		{"quarantined_cooldown_seconds", latencyShadow.QuarantinedCooldownSeconds},
+		{"hard_invalid_cooldown_seconds", latencyShadow.HardInvalidCooldownSeconds},
+		{"latency_half_life_seconds", latencyShadow.LatencyHalfLifeSeconds},
+		{"error_half_life_seconds", latencyShadow.ErrorHalfLifeSeconds},
+	}
+	for _, policyDuration := range policyDurations {
+		if policyDuration.value < minimumPositivePolicyValue {
+			return fmt.Errorf(
+				"gateway.scheduling.openai_latency_shadow.%s must be positive when enabled",
+				policyDuration.name,
+			)
+		}
 	}
 	if c.Gateway.Scheduling.SlotCleanupInterval < 0 {
 		return fmt.Errorf("gateway.scheduling.slot_cleanup_interval must be non-negative")

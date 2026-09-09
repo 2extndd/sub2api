@@ -99,6 +99,33 @@ func (_u *ChannelMonitorHistoryUpdate) ClearLatencyMs() *ChannelMonitorHistoryUp
 	return _u
 }
 
+// SetFirstTokenMs sets the "first_token_ms" field.
+func (_u *ChannelMonitorHistoryUpdate) SetFirstTokenMs(v int) *ChannelMonitorHistoryUpdate {
+	_u.mutation.ResetFirstTokenMs()
+	_u.mutation.SetFirstTokenMs(v)
+	return _u
+}
+
+// SetNillableFirstTokenMs sets the "first_token_ms" field if the given value is not nil.
+func (_u *ChannelMonitorHistoryUpdate) SetNillableFirstTokenMs(v *int) *ChannelMonitorHistoryUpdate {
+	if v != nil {
+		_u.SetFirstTokenMs(*v)
+	}
+	return _u
+}
+
+// AddFirstTokenMs adds value to the "first_token_ms" field.
+func (_u *ChannelMonitorHistoryUpdate) AddFirstTokenMs(v int) *ChannelMonitorHistoryUpdate {
+	_u.mutation.AddFirstTokenMs(v)
+	return _u
+}
+
+// ClearFirstTokenMs clears the value of the "first_token_ms" field.
+func (_u *ChannelMonitorHistoryUpdate) ClearFirstTokenMs() *ChannelMonitorHistoryUpdate {
+	_u.mutation.ClearFirstTokenMs()
+	return _u
+}
+
 // SetPingLatencyMs sets the "ping_latency_ms" field.
 func (_u *ChannelMonitorHistoryUpdate) SetPingLatencyMs(v int) *ChannelMonitorHistoryUpdate {
 	_u.mutation.ResetPingLatencyMs()
@@ -265,6 +292,15 @@ func (_u *ChannelMonitorHistoryUpdate) sqlSave(ctx context.Context) (_node int, 
 	if _u.mutation.LatencyMsCleared() {
 		_spec.ClearField(channelmonitorhistory.FieldLatencyMs, field.TypeInt)
 	}
+	if value, ok := _u.mutation.FirstTokenMs(); ok {
+		_spec.SetField(channelmonitorhistory.FieldFirstTokenMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFirstTokenMs(); ok {
+		_spec.AddField(channelmonitorhistory.FieldFirstTokenMs, field.TypeInt, value)
+	}
+	if _u.mutation.FirstTokenMsCleared() {
+		_spec.ClearField(channelmonitorhistory.FieldFirstTokenMs, field.TypeInt)
+	}
 	if value, ok := _u.mutation.PingLatencyMs(); ok {
 		_spec.SetField(channelmonitorhistory.FieldPingLatencyMs, field.TypeInt, value)
 	}
@@ -404,6 +440,33 @@ func (_u *ChannelMonitorHistoryUpdateOne) AddLatencyMs(v int) *ChannelMonitorHis
 // ClearLatencyMs clears the value of the "latency_ms" field.
 func (_u *ChannelMonitorHistoryUpdateOne) ClearLatencyMs() *ChannelMonitorHistoryUpdateOne {
 	_u.mutation.ClearLatencyMs()
+	return _u
+}
+
+// SetFirstTokenMs sets the "first_token_ms" field.
+func (_u *ChannelMonitorHistoryUpdateOne) SetFirstTokenMs(v int) *ChannelMonitorHistoryUpdateOne {
+	_u.mutation.ResetFirstTokenMs()
+	_u.mutation.SetFirstTokenMs(v)
+	return _u
+}
+
+// SetNillableFirstTokenMs sets the "first_token_ms" field if the given value is not nil.
+func (_u *ChannelMonitorHistoryUpdateOne) SetNillableFirstTokenMs(v *int) *ChannelMonitorHistoryUpdateOne {
+	if v != nil {
+		_u.SetFirstTokenMs(*v)
+	}
+	return _u
+}
+
+// AddFirstTokenMs adds value to the "first_token_ms" field.
+func (_u *ChannelMonitorHistoryUpdateOne) AddFirstTokenMs(v int) *ChannelMonitorHistoryUpdateOne {
+	_u.mutation.AddFirstTokenMs(v)
+	return _u
+}
+
+// ClearFirstTokenMs clears the value of the "first_token_ms" field.
+func (_u *ChannelMonitorHistoryUpdateOne) ClearFirstTokenMs() *ChannelMonitorHistoryUpdateOne {
+	_u.mutation.ClearFirstTokenMs()
 	return _u
 }
 
@@ -602,6 +665,15 @@ func (_u *ChannelMonitorHistoryUpdateOne) sqlSave(ctx context.Context) (_node *C
 	}
 	if _u.mutation.LatencyMsCleared() {
 		_spec.ClearField(channelmonitorhistory.FieldLatencyMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.FirstTokenMs(); ok {
+		_spec.SetField(channelmonitorhistory.FieldFirstTokenMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFirstTokenMs(); ok {
+		_spec.AddField(channelmonitorhistory.FieldFirstTokenMs, field.TypeInt, value)
+	}
+	if _u.mutation.FirstTokenMsCleared() {
+		_spec.ClearField(channelmonitorhistory.FieldFirstTokenMs, field.TypeInt)
 	}
 	if value, ok := _u.mutation.PingLatencyMs(); ok {
 		_spec.SetField(channelmonitorhistory.FieldPingLatencyMs, field.TypeInt, value)

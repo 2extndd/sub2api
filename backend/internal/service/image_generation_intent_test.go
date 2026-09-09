@@ -427,3 +427,23 @@ func TestCollectOpenAIImageOutputSizesFromSSEBody(t *testing.T) {
 	require.Equal(t, 2, countOpenAIImageOutputsFromSSEBody(body))
 	require.Equal(t, []string{"3840x2160", "1024x1024"}, collectOpenAIImageOutputSizesFromSSEBody(body))
 }
+
+func TestGeminiImageAliasesStayOnOpenAIImageBillingPath(t *testing.T) {
+	for _, model := range []string{
+		"gemini-3-pro-image",
+		"gemini-3-pro-image-preview",
+		"gemini-3.1-flash-image",
+		"gemini-3.1-flash-image-preview",
+		"gemini-2.5-flash-image",
+	} {
+		require.Truef(t, isOpenAIImageGenerationModel(model), "model %q should be classified as image", model)
+		require.Truef(t, IsImageGenerationIntent("/v1/chat/completions", model, nil), "model %q should be image intent", model)
+	}
+}
+
+func TestResolveOpenAIImageCountFallsBackForKnownImageModel(t *testing.T) {
+	require.Equal(t, 1, resolveOpenAIImageCount(0, "gemini-3-pro-image", "gemini-3-pro-image"))
+	require.Equal(t, 2, resolveOpenAIImageCount(2, "gemini-3-pro-image", "gemini-3-pro-image"))
+	require.Zero(t, resolveOpenAIImageCount(0, "gpt-image-2", "gpt-image-2"))
+	require.Zero(t, resolveOpenAIImageCount(0, "gemini-3-pro", "gemini-3-pro"))
+}

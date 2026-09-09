@@ -59,6 +59,7 @@ type channelMonitorUserListItem struct {
 	PrimaryModel         string                               `json:"primary_model"`
 	PrimaryStatus        string                               `json:"primary_status"`
 	PrimaryLatencyMs     *int                                 `json:"primary_latency_ms"`
+	AvgFirstToken7dMs    *int                                 `json:"avg_first_token_7d_ms"`
 	PrimaryPingLatencyMs *int                                 `json:"primary_ping_latency_ms"`
 	Availability7d       float64                              `json:"availability_7d"`
 	ExtraModels          []dto.ChannelMonitorExtraModelStatus `json:"extra_models"`
@@ -73,6 +74,7 @@ type channelMonitorUserListItem struct {
 type channelMonitorUserTimelinePoint struct {
 	Status        string `json:"status"`
 	LatencyMs     *int   `json:"latency_ms"`
+	FirstTokenMs  *int   `json:"first_token_ms"`
 	PingLatencyMs *int   `json:"ping_latency_ms"`
 	CheckedAt     string `json:"checked_at"`
 }
@@ -86,13 +88,14 @@ type channelMonitorUserDetailResponse struct {
 }
 
 type channelMonitorUserModelStat struct {
-	Model           string  `json:"model"`
-	LatestStatus    string  `json:"latest_status"`
-	LatestLatencyMs *int    `json:"latest_latency_ms"`
-	Availability7d  float64 `json:"availability_7d"`
-	Availability15d float64 `json:"availability_15d"`
-	Availability30d float64 `json:"availability_30d"`
-	AvgLatency7dMs  *int    `json:"avg_latency_7d_ms"`
+	Model             string  `json:"model"`
+	LatestStatus      string  `json:"latest_status"`
+	LatestLatencyMs   *int    `json:"latest_latency_ms"`
+	Availability7d    float64 `json:"availability_7d"`
+	Availability15d   float64 `json:"availability_15d"`
+	Availability30d   float64 `json:"availability_30d"`
+	AvgLatency7dMs    *int    `json:"avg_latency_7d_ms"`
+	AvgFirstToken7dMs *int    `json:"avg_first_token_7d_ms"`
 }
 
 func userMonitorViewToItem(v *service.UserMonitorView, includeQuota bool) channelMonitorUserListItem {
@@ -109,6 +112,7 @@ func userMonitorViewToItem(v *service.UserMonitorView, includeQuota bool) channe
 		timeline = append(timeline, channelMonitorUserTimelinePoint{
 			Status:        p.Status,
 			LatencyMs:     p.LatencyMs,
+			FirstTokenMs:  p.FirstTokenMs,
 			PingLatencyMs: p.PingLatencyMs,
 			CheckedAt:     p.CheckedAt.UTC().Format(time.RFC3339),
 		})
@@ -121,6 +125,7 @@ func userMonitorViewToItem(v *service.UserMonitorView, includeQuota bool) channe
 		PrimaryModel:         v.PrimaryModel,
 		PrimaryStatus:        v.PrimaryStatus,
 		PrimaryLatencyMs:     v.PrimaryLatencyMs,
+		AvgFirstToken7dMs:    v.AvgFirstToken7dMs,
 		PrimaryPingLatencyMs: v.PrimaryPingLatencyMs,
 		Availability7d:       v.Availability7d,
 		ExtraModels:          extras,
@@ -136,13 +141,14 @@ func userMonitorDetailToResponse(d *service.UserMonitorDetail) *channelMonitorUs
 	models := make([]channelMonitorUserModelStat, 0, len(d.Models))
 	for _, m := range d.Models {
 		models = append(models, channelMonitorUserModelStat{
-			Model:           m.Model,
-			LatestStatus:    m.LatestStatus,
-			LatestLatencyMs: m.LatestLatencyMs,
-			Availability7d:  m.Availability7d,
-			Availability15d: m.Availability15d,
-			Availability30d: m.Availability30d,
-			AvgLatency7dMs:  m.AvgLatency7dMs,
+			Model:             m.Model,
+			LatestStatus:      m.LatestStatus,
+			LatestLatencyMs:   m.LatestLatencyMs,
+			Availability7d:    m.Availability7d,
+			Availability15d:   m.Availability15d,
+			Availability30d:   m.Availability30d,
+			AvgLatency7dMs:    m.AvgLatency7dMs,
+			AvgFirstToken7dMs: m.AvgFirstToken7dMs,
 		})
 	}
 	return &channelMonitorUserDetailResponse{

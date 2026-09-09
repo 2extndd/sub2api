@@ -111,6 +111,15 @@ func (s *OpenAIGatewayService) failoverOpenAIUpstreamHTTPError(
 		}
 		upstreamDetail = truncateString(string(respBody), maxBytes)
 	}
+	shouldDisable := false
+	if account.Platform != PlatformGrok {
+		shouldDisable = s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, upstreamModel)
+	}
+	policy := ClassifyUpstreamHTTPFailure(resp.StatusCode, respBody, resp.Header)
+	if shouldDisable {
+		policy.Retry = GatewayRetryNextAccount
+	}
+	SetOpsFailurePolicy(c, policy)
 	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 		Platform:           account.Platform,
 		AccountID:          account.ID,
@@ -121,10 +130,6 @@ func (s *OpenAIGatewayService) failoverOpenAIUpstreamHTTPError(
 		Message:            upstreamMsg,
 		Detail:             upstreamDetail,
 	})
-	shouldDisable := tempUnscheduled
-	if account.Platform != PlatformGrok && !tempUnscheduled {
-		shouldDisable = s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, upstreamModel)
-	}
 	return s.newOpenAIAccountFailoverError(
 		account,
 		resp.StatusCode,

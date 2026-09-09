@@ -70,6 +70,11 @@ func LatencyMs(v int) predicate.ChannelMonitorHistory {
 	return predicate.ChannelMonitorHistory(sql.FieldEQ(FieldLatencyMs, v))
 }
 
+// FirstTokenMs applies equality check predicate on the "first_token_ms" field. It's identical to FirstTokenMsEQ.
+func FirstTokenMs(v int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldEQ(FieldFirstTokenMs, v))
+}
+
 // PingLatencyMs applies equality check predicate on the "ping_latency_ms" field. It's identical to PingLatencyMsEQ.
 func PingLatencyMs(v int) predicate.ChannelMonitorHistory {
 	return predicate.ChannelMonitorHistory(sql.FieldEQ(FieldPingLatencyMs, v))
@@ -238,6 +243,56 @@ func LatencyMsIsNil() predicate.ChannelMonitorHistory {
 // LatencyMsNotNil applies the NotNil predicate on the "latency_ms" field.
 func LatencyMsNotNil() predicate.ChannelMonitorHistory {
 	return predicate.ChannelMonitorHistory(sql.FieldNotNull(FieldLatencyMs))
+}
+
+// FirstTokenMsEQ applies the EQ predicate on the "first_token_ms" field.
+func FirstTokenMsEQ(v int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldEQ(FieldFirstTokenMs, v))
+}
+
+// FirstTokenMsNEQ applies the NEQ predicate on the "first_token_ms" field.
+func FirstTokenMsNEQ(v int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldNEQ(FieldFirstTokenMs, v))
+}
+
+// FirstTokenMsIn applies the In predicate on the "first_token_ms" field.
+func FirstTokenMsIn(vs ...int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldIn(FieldFirstTokenMs, vs...))
+}
+
+// FirstTokenMsNotIn applies the NotIn predicate on the "first_token_ms" field.
+func FirstTokenMsNotIn(vs ...int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldNotIn(FieldFirstTokenMs, vs...))
+}
+
+// FirstTokenMsGT applies the GT predicate on the "first_token_ms" field.
+func FirstTokenMsGT(v int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldGT(FieldFirstTokenMs, v))
+}
+
+// FirstTokenMsGTE applies the GTE predicate on the "first_token_ms" field.
+func FirstTokenMsGTE(v int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldGTE(FieldFirstTokenMs, v))
+}
+
+// FirstTokenMsLT applies the LT predicate on the "first_token_ms" field.
+func FirstTokenMsLT(v int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldLT(FieldFirstTokenMs, v))
+}
+
+// FirstTokenMsLTE applies the LTE predicate on the "first_token_ms" field.
+func FirstTokenMsLTE(v int) predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldLTE(FieldFirstTokenMs, v))
+}
+
+// FirstTokenMsIsNil applies the IsNil predicate on the "first_token_ms" field.
+func FirstTokenMsIsNil() predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldIsNull(FieldFirstTokenMs))
+}
+
+// FirstTokenMsNotNil applies the NotNil predicate on the "first_token_ms" field.
+func FirstTokenMsNotNil() predicate.ChannelMonitorHistory {
+	return predicate.ChannelMonitorHistory(sql.FieldNotNull(FieldFirstTokenMs))
 }
 
 // PingLatencyMsEQ applies the EQ predicate on the "ping_latency_ms" field.

@@ -4,6 +4,16 @@
  */
 
 import { apiClient } from '../client'
+export interface AccountDenyingUser {
+  user_id: number
+  email: string
+}
+
+export interface AccountDenyingUsersResponse {
+  account_id: number
+  users: AccountDenyingUser[]
+}
+
 import type {
   Account,
   CreateAccountRequest,
@@ -167,6 +177,11 @@ export async function listWithEtag(
  * @param id - Account ID
  * @returns Account details
  */
+export async function getDenyingUsers(id: number): Promise<AccountDenyingUsersResponse> {
+  const { data } = await apiClient.get<AccountDenyingUsersResponse>(`/admin/accounts/${id}/denying-users`)
+  return data
+}
+
 export async function getById(id: number): Promise<Account> {
   const { data } = await apiClient.get<Account>(`/admin/accounts/${id}`)
   return data
@@ -1050,6 +1065,7 @@ export const accountsAPI = {
   listWithEtag,
   getUpstreamBillingRatesWithEtag,
   getById,
+  getDenyingUsers,
   create,
   duplicate,
   update,

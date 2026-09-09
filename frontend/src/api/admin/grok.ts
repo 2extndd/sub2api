@@ -67,6 +67,7 @@ export interface GrokSSOToOAuthRequest {
   load_factor?: number
   priority?: number
   rate_multiplier?: number
+  usage_billing_multiplier?: number
   expires_at?: number | null
   auto_pause_on_expired?: boolean
 }

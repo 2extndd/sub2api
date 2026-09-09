@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -67,10 +68,11 @@ func runCheckForModel(ctx context.Context, provider, endpoint, apiKey, model str
 	mode := bodyOverrideMode(opts)
 
 	start := time.Now()
-	respText, rawBody, statusCode, err := callProvider(ctx, provider, endpoint, apiKey, model, challenge.Prompt, opts)
+	respText, rawBody, statusCode, firstTokenMs, err := callProvider(ctx, provider, endpoint, apiKey, model, challenge.Prompt, opts)
 	latency := time.Since(start)
 	latencyMs := int(latency / time.Millisecond)
 	res.LatencyMs = &latencyMs
+	res.FirstTokenMs = firstTokenMs
 
 	if err != nil {
 		res.Status = MonitorStatusError
@@ -99,6 +101,9 @@ func runCheckForModel(ctx context.Context, provider, endpoint, apiKey, model str
 	}
 
 	if !validateChallenge(respText, challenge.Expected) {
+		// A text delta was observed, but the probe response is not valid for
+		// health-check purposes; do not let it become a TTFT sample.
+		res.FirstTokenMs = nil
 		res.Status = MonitorStatusFailed
 		res.Message = truncateMessage(sanitizeErrorMessage(fmt.Sprintf("challenge mismatch (expected %s, got %q)", challenge.Expected, respText)))
 		return res
@@ -157,11 +162,13 @@ func pingEndpointOrigin(ctx context.Context, endpoint string) *int {
 //
 // 加新 provider 只需要在 providerAdapters 里增加一个条目，无需触碰 callProvider / validateProvider。
 type providerAdapter struct {
-	buildPath    func(model string) string
-	buildBody    func(model, prompt string) ([]byte, error)
-	buildHeaders func(apiKey string) map[string]string
-	textPath     string // gjson 提取响应文本的 path
-	extractText  func([]byte) string
+	buildPath         func(model string) string
+	buildBody         func(model, prompt string) ([]byte, error)
+	buildHeaders      func(apiKey string) map[string]string
+	streamPath        func(model string) string
+	textPath          string // gjson 提取响应文本的 path
+	extractText       func([]byte) string
+	extractStreamText func([]byte) string
 }
 
 // providerAdapters 全部已支持的 provider。键值即 MonitorProvider* 字符串。
@@ -182,6 +189,7 @@ var providerAdapters = map[string]providerAdapter{
 				"model":      model,
 				"messages":   []map[string]string{{"role": "user", "content": prompt}},
 				"max_tokens": monitorChallengeMaxTokens,
+				"stream":     true,
 			})
 		},
 		buildHeaders: func(apiKey string) map[string]string {
@@ -190,7 +198,9 @@ var providerAdapters = map[string]providerAdapter{
 				"anthropic-version": monitorAnthropicAPIVersion,
 			}
 		},
-		extractText: extractAnthropicMonitorText,
+		streamPath:        func(string) string { return providerAnthropicPath },
+		extractText:       extractAnthropicMonitorText,
+		extractStreamText: extractAnthropicMonitorStreamDelta,
 	},
 	MonitorProviderGemini: {
 		// Gemini 把 model 名写在 URL path 上：/v1beta/models/{model}:generateContent
@@ -207,7 +217,9 @@ var providerAdapters = map[string]providerAdapter{
 		buildHeaders: func(apiKey string) map[string]string {
 			return map[string]string{"x-goog-api-key": apiKey}
 		},
-		textPath: "candidates.0.content.parts.0.text",
+		streamPath:        func(model string) string { return fmt.Sprintf(providerGeminiStreamPathTemplate, model) },
+		textPath:          "candidates.0.content.parts.0.text",
+		extractStreamText: extractGeminiMonitorStreamDelta,
 	},
 }
 
@@ -228,38 +240,42 @@ var providerDeepseekChatAdapter = newOpenAICompatibleChatAdapter(providerOpenAIP
 
 func newOpenAICompatibleChatAdapter(path string) providerAdapter {
 	return providerAdapter{
-		buildPath: func(string) string { return path },
+		buildPath:  func(string) string { return path },
+		streamPath: func(string) string { return path },
 		buildBody: func(model, prompt string) ([]byte, error) {
 			return json.Marshal(map[string]any{
 				"model":      model,
 				"messages":   []map[string]string{{"role": "user", "content": prompt}},
 				"max_tokens": monitorChallengeMaxTokens,
-				"stream":     false,
+				"stream":     true,
 			})
 		},
 		buildHeaders: func(apiKey string) map[string]string {
 			return map[string]string{"Authorization": "Bearer " + apiKey}
 		},
-		textPath: "choices.0.message.content",
+		textPath:          "choices.0.message.content",
+		extractStreamText: extractOpenAIChatMonitorStreamDelta,
 	}
 }
 
 //nolint:gochecknoglobals // 适配器表是只读静态数据，初始化后不变更。
 var providerOpenAIResponsesAdapter = providerAdapter{
-	buildPath: func(string) string { return providerOpenAIResponsesPath },
+	buildPath:  func(string) string { return providerOpenAIResponsesPath },
+	streamPath: func(string) string { return providerOpenAIResponsesPath },
 	buildBody: func(model, prompt string) ([]byte, error) {
 		return json.Marshal(map[string]any{
 			"model":             model,
 			"instructions":      "You are a channel health-check endpoint. Answer the arithmetic challenge exactly and briefly.",
 			"input":             prompt,
 			"max_output_tokens": monitorChallengeMaxTokens,
-			"stream":            false,
+			"stream":            true,
 		})
 	},
 	buildHeaders: func(apiKey string) map[string]string {
 		return map[string]string{"Authorization": "Bearer " + apiKey}
 	},
-	textPath: "output.0.content.0.text",
+	textPath:          "output.0.content.0.text",
+	extractStreamText: extractOpenAIResponsesMonitorStreamDelta,
 }
 
 // providerAdapterFor 按 provider + api_mode 选择具体 adapter。
@@ -278,30 +294,56 @@ func providerAdapterFor(provider, apiMode string) (providerAdapter, string, bool
 //   - extractedText: 按 textPath 抽出的成功文本，仅在 status 2xx 时有意义；非 2xx 时通常为空串
 //   - rawBody: 完整响应体的字符串形式（已被 monitorResponseMaxBytes 截断），用于错误路径保留上游真实回包
 //   - status: HTTP 状态码
+//   - firstTokenMs: streaming response 中首个非空文本 delta 的耗时；非 streaming 时为 nil
 //   - err: 网络 / 序列化错误
-func callProvider(ctx context.Context, provider, endpoint, apiKey, model, prompt string, opts *CheckOptions) (extractedText, rawBody string, status int, err error) {
+func callProvider(ctx context.Context, provider, endpoint, apiKey, model, prompt string, opts *CheckOptions) (extractedText, rawBody string, status int, firstTokenMs *int, err error) {
 	requestedAPIMode := checkAPIMode(opts)
 	if err := validateAPIMode(provider, requestedAPIMode); err != nil {
-		return "", "", 0, err
+		return "", "", 0, nil, err
 	}
 	adapter, apiMode, ok := providerAdapterFor(provider, requestedAPIMode)
 	if !ok {
-		return "", "", 0, fmt.Errorf("unsupported provider %q", provider)
+		return "", "", 0, nil, fmt.Errorf("unsupported provider %q", provider)
 	}
 	body, err := buildRequestBody(adapter, provider, apiMode, model, prompt, opts)
 	if err != nil {
-		return "", "", 0, err
+		return "", "", 0, nil, err
+	}
+	streaming := providerRequestUsesStreaming(provider, apiMode, bodyOverrideMode(opts), body)
+	path := adapter.buildPath(model)
+	if streaming && adapter.streamPath != nil {
+		path = adapter.streamPath(model)
 	}
 	headers := mergeHeaders(adapter.buildHeaders(apiKey), opts)
-	full := joinURL(endpoint, adapter.buildPath(model))
-	respBytes, status, err := postRawJSON(ctx, full, body, headers)
+	full := joinURL(endpoint, path)
+	var respBytes []byte
+	if streaming {
+		respBytes, status, firstTokenMs, err = postStreamingJSON(ctx, full, body, headers, adapter.extractStreamText)
+	} else {
+		respBytes, status, err = postRawJSON(ctx, full, body, headers)
+	}
 	if err != nil {
-		return "", "", status, err
+		return "", string(respBytes), status, firstTokenMs, err
+	}
+	if streaming {
+		if text := extractMonitorStreamText(adapter, respBytes); text != "" {
+			return text, string(respBytes), status, firstTokenMs, nil
+		}
 	}
 	if provider == MonitorProviderOpenAI && apiMode == MonitorAPIModeResponses {
-		return extractOpenAIResponsesText(respBytes), string(respBytes), status, nil
+		return extractOpenAIResponsesText(respBytes), string(respBytes), status, firstTokenMs, nil
 	}
-	return extractMonitorResponseText(adapter, respBytes), string(respBytes), status, nil
+	return extractMonitorResponseText(adapter, respBytes), string(respBytes), status, firstTokenMs, nil
+}
+
+// providerRequestUsesStreaming keeps standard monitor probes streaming even when an
+// adapter does not encode a provider-specific stream flag (Gemini uses an SSE path).
+// Replace mode remains fully user-controlled so custom static JSON probes keep working.
+func providerRequestUsesStreaming(provider, apiMode, mode string, body []byte) bool {
+	if mode != MonitorBodyOverrideModeReplace && provider == MonitorProviderGemini {
+		return true
+	}
+	return gjson.GetBytes(body, "stream").Bool()
 }
 
 func extractMonitorResponseText(adapter providerAdapter, respBytes []byte) string {
@@ -309,6 +351,110 @@ func extractMonitorResponseText(adapter providerAdapter, respBytes []byte) strin
 		return adapter.extractText(respBytes)
 	}
 	return gjson.GetBytes(respBytes, adapter.textPath).String()
+}
+
+// extractMonitorStreamText joins all provider-specific textual SSE deltas.
+func extractMonitorStreamText(adapter providerAdapter, respBytes []byte) string {
+	if adapter.extractStreamText == nil {
+		return ""
+	}
+	var text strings.Builder
+	forEachMonitorSSEData(respBytes, func(data []byte) {
+		text.WriteString(adapter.extractStreamText(data))
+	})
+	return text.String()
+}
+
+// forEachMonitorSSEData visits each SSE data event in arrival order. It accepts
+// multi-line data events and ignores comments/event/id fields, as required by SSE.
+func forEachMonitorSSEData(raw []byte, fn func([]byte)) bool {
+	lines := strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n")
+	var dataLines []string
+	sawData := false
+	flush := func() {
+		if len(dataLines) == 0 {
+			return
+		}
+		data := strings.Join(dataLines, "\n")
+		dataLines = nil
+		if data != "[DONE]" {
+			fn([]byte(data))
+		}
+	}
+	for _, line := range lines {
+		if line == "" {
+			flush()
+			continue
+		}
+		if strings.HasPrefix(line, "data:") {
+			sawData = true
+			value := strings.TrimPrefix(line, "data:")
+			dataLines = append(dataLines, strings.TrimPrefix(value, " "))
+		}
+	}
+	flush()
+	return sawData
+}
+
+func extractOpenAIChatMonitorStreamDelta(data []byte) string {
+	content := gjson.GetBytes(data, "choices.0.delta.content")
+	if content.Type == gjson.String {
+		return content.String()
+	}
+	if content.IsArray() {
+		var text strings.Builder
+		content.ForEach(func(_, part gjson.Result) bool {
+			if value := part.Get("text").String(); value != "" {
+				text.WriteString(value)
+			}
+			return true
+		})
+		return text.String()
+	}
+	return ""
+}
+
+func extractOpenAIResponsesMonitorStreamDelta(data []byte) string {
+	eventType := gjson.GetBytes(data, "type").String()
+	if eventType != "" && eventType != "response.output_text.delta" {
+		return ""
+	}
+	return gjson.GetBytes(data, "delta").String()
+}
+
+func extractAnthropicMonitorStreamDelta(data []byte) string {
+	if gjson.GetBytes(data, "type").String() != "content_block_delta" {
+		return ""
+	}
+	if gjson.GetBytes(data, "delta.type").String() != "text_delta" {
+		return ""
+	}
+	return gjson.GetBytes(data, "delta.text").String()
+}
+
+func extractGeminiMonitorStreamDelta(data []byte) string {
+	var text strings.Builder
+	candidates := gjson.GetBytes(data, "candidates")
+	if !candidates.IsArray() {
+		return ""
+	}
+	candidates.ForEach(func(_, candidate gjson.Result) bool {
+		parts := candidate.Get("content.parts")
+		if !parts.IsArray() {
+			return true
+		}
+		parts.ForEach(func(_, part gjson.Result) bool {
+			if part.Get("thought").Bool() {
+				return true
+			}
+			if value := part.Get("text"); value.Type == gjson.String {
+				text.WriteString(value.String())
+			}
+			return true
+		})
+		return true
+	})
+	return text.String()
 }
 
 func extractAnthropicMonitorText(respBytes []byte) string {
@@ -452,8 +598,8 @@ var bodyMergeKeyDenyList = map[string]map[string]bool{
 	MonitorProviderOpenAI + ":" + MonitorAPIModeChatCompletions: {"model": true, "messages": true, "stream": true},
 	MonitorProviderOpenAI + ":" + MonitorAPIModeResponses:       {"model": true, "instructions": true, "input": true, "stream": true},
 	MonitorProviderGrok:      {"model": true, "messages": true, "stream": true},
-	MonitorProviderAnthropic: {"model": true, "messages": true},
-	MonitorProviderGemini:    {"contents": true},
+	MonitorProviderAnthropic: {"model": true, "messages": true, "stream": true},
+	MonitorProviderGemini:    {"contents": true, "stream": true},
 	// 国产 3 家与 OpenAI Chat Completions 同构。
 	MonitorProviderKimi:     {"model": true, "messages": true, "stream": true},
 	MonitorProviderZhipu:    {"model": true, "messages": true, "stream": true},
@@ -528,27 +674,104 @@ func hasNonEmptyBodyValue(v any) bool {
 // postRawJSON 发送 POST + 已序列化好的 JSON 字节，限制响应体大小，返回响应字节、HTTP status、错误。
 // adapter 自行 marshal 是为了精确控制字段顺序与类型，所以这里直接收 []byte 而不是 any。
 func postRawJSON(ctx context.Context, fullURL string, payload []byte, headers map[string]string) ([]byte, int, error) {
+	body, status, _, err := postProviderJSON(ctx, fullURL, payload, headers, false, nil)
+	return body, status, err
+}
+
+// postStreamingJSON sends a streaming probe and measures the elapsed time until
+// the first provider-specific non-empty textual SSE delta is observed.
+func postStreamingJSON(ctx context.Context, fullURL string, payload []byte, headers map[string]string, extract func([]byte) string) ([]byte, int, *int, error) {
+	return postProviderJSON(ctx, fullURL, payload, headers, true, extract)
+}
+
+func postProviderJSON(ctx context.Context, fullURL string, payload []byte, headers map[string]string, streaming bool, extract func([]byte) string) ([]byte, int, *int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(payload))
 	if err != nil {
-		return nil, 0, fmt.Errorf("build request: %w", err)
+		return nil, 0, nil, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	if streaming {
+		req.Header.Set("Accept", "text/event-stream")
+	} else {
+		req.Header.Set("Accept", "application/json")
+	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
 
+	started := time.Now()
 	resp, err := monitorHTTPClient.Do(req)
 	if err != nil {
-		return nil, 0, fmt.Errorf("do request: %w", err)
+		return nil, 0, nil, fmt.Errorf("do request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, monitorResponseMaxBytes))
+		if readErr != nil {
+			return respBody, resp.StatusCode, nil, fmt.Errorf("read body: %w", readErr)
+		}
+		return respBody, resp.StatusCode, nil, nil
+	}
+	if streaming {
+		body, firstTokenMs, readErr := readMonitorStreamingBody(resp.Body, started, extract)
+		if readErr != nil {
+			return body, resp.StatusCode, nil, fmt.Errorf("read body: %w", readErr)
+		}
+		return body, resp.StatusCode, firstTokenMs, nil
+	}
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, monitorResponseMaxBytes))
 	if err != nil {
-		return nil, resp.StatusCode, fmt.Errorf("read body: %w", err)
+		return nil, resp.StatusCode, nil, fmt.Errorf("read body: %w", err)
 	}
-	return respBody, resp.StatusCode, nil
+	return respBody, resp.StatusCode, nil, nil
+}
+
+// readMonitorStreamingBody reads the complete SSE response so dialog validation
+// still sees every delta, while recording TTFT at the first meaningful delta.
+func readMonitorStreamingBody(body io.Reader, started time.Time, extract func([]byte) string) ([]byte, *int, error) {
+	reader := bufio.NewReader(io.LimitReader(body, int64(monitorResponseMaxBytes)+1))
+	var raw bytes.Buffer
+	var dataLines []string
+	var firstTokenMs *int
+	flush := func() {
+		if len(dataLines) == 0 {
+			return
+		}
+		data := strings.Join(dataLines, "\n")
+		dataLines = nil
+		if data == "[DONE]" || extract == nil || firstTokenMs != nil {
+			return
+		}
+		if strings.TrimSpace(extract([]byte(data))) == "" {
+			return
+		}
+		ms := int(time.Since(started) / time.Millisecond)
+		firstTokenMs = &ms
+	}
+	for {
+		line, readErr := reader.ReadString('\n')
+		if line != "" {
+			_, _ = raw.WriteString(line)
+			if raw.Len() > monitorResponseMaxBytes {
+				return raw.Bytes()[:monitorResponseMaxBytes], firstTokenMs, errors.New("response exceeds size limit")
+			}
+			line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+			if line == "" {
+				flush()
+			} else if strings.HasPrefix(line, "data:") {
+				value := strings.TrimPrefix(line, "data:")
+				dataLines = append(dataLines, strings.TrimPrefix(value, " "))
+			}
+		}
+		if readErr != nil {
+			if readErr == io.EOF {
+				flush()
+				return raw.Bytes(), firstTokenMs, nil
+			}
+			return raw.Bytes(), firstTokenMs, readErr
+		}
+	}
 }
 
 // joinURL 把 base origin 与 path 拼成完整 URL。

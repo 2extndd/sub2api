@@ -154,6 +154,9 @@ func createAccountRecord(ctx context.Context, client *dbent.Client, account *ser
 	if account.RateMultiplier != nil {
 		builder.SetRateMultiplier(*account.RateMultiplier)
 	}
+	if account.UsageBillingMultiplier != nil {
+		builder.SetUsageBillingMultiplier(*account.UsageBillingMultiplier)
+	}
 	if account.LoadFactor != nil {
 		builder.SetLoadFactor(*account.LoadFactor)
 	}
@@ -432,7 +435,10 @@ func (r *accountRepository) ListCRSAccountIDs(ctx context.Context) (map[string]i
 }
 
 func (r *accountRepository) Update(ctx context.Context, account *service.Account) error {
-	return r.updateAccount(ctx, account, nil, nil, account.RateMultiplier)
+	// Generic background/full-account updates do not own the customer billing
+	// multiplier. Preserve the current database value so a stale scheduler/probe
+	// account snapshot cannot revert an explicit admin billing change.
+	return r.updateAccount(ctx, account, nil, nil, account.RateMultiplier, nil)
 }
 
 // UpdateWithAccountBillingSettings applies an admin account edit while
@@ -444,8 +450,9 @@ func (r *accountRepository) UpdateWithAccountBillingSettings(
 	probeEnabled *bool,
 	rateSyncEnabled *bool,
 	rateMultiplier *float64,
+	usageBillingMultiplier *float64,
 ) error {
-	return r.updateAccount(ctx, account, probeEnabled, rateSyncEnabled, rateMultiplier)
+	return r.updateAccount(ctx, account, probeEnabled, rateSyncEnabled, rateMultiplier, usageBillingMultiplier)
 }
 
 func (r *accountRepository) updateAccount(
@@ -454,6 +461,7 @@ func (r *accountRepository) updateAccount(
 	explicitProbeEnabled *bool,
 	explicitRateSyncEnabled *bool,
 	explicitRateMultiplier *float64,
+	explicitUsageBillingMultiplier *float64,
 ) error {
 	if account == nil {
 		return nil
@@ -485,6 +493,7 @@ func (r *accountRepository) updateAccount(
 		explicitProbeEnabled,
 		explicitRateSyncEnabled,
 		explicitRateMultiplier,
+		explicitUsageBillingMultiplier,
 	)
 	if err != nil {
 		return translatePersistenceError(err, service.ErrAccountNotFound, nil)
@@ -514,6 +523,7 @@ func (r *accountRepository) updateLockedAccount(
 	explicitProbeEnabled *bool,
 	explicitRateSyncEnabled *bool,
 	explicitRateMultiplier *float64,
+	explicitUsageBillingMultiplier *float64,
 ) (*dbent.Account, error) {
 	extra, err := lockAndMergeAccountProbeExtra(ctx, client, account, explicitProbeEnabled, explicitRateSyncEnabled)
 	if err != nil {
@@ -542,6 +552,9 @@ func (r *accountRepository) updateLockedAccount(
 
 	if explicitRateMultiplier != nil {
 		builder.SetRateMultiplier(*explicitRateMultiplier)
+	}
+	if explicitUsageBillingMultiplier != nil {
+		builder.SetUsageBillingMultiplier(*explicitUsageBillingMultiplier)
 	}
 	if account.LoadFactor != nil {
 		builder.SetLoadFactor(*account.LoadFactor)
@@ -1747,6 +1760,7 @@ func (r *accountRepository) ClearError(ctx context.Context, id int64) error {
 		Where(dbaccount.IDEQ(id)).
 		SetStatus(service.StatusActive).
 		SetErrorMessage("").
+		SetSchedulable(true).
 		Save(ctx)
 	if err != nil {
 		return err
@@ -2870,6 +2884,11 @@ func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates
 		args = append(args, *updates.RateMultiplier)
 		idx++
 	}
+	if updates.UsageBillingMultiplier != nil {
+		setClauses = append(setClauses, "usage_billing_multiplier = $"+itoa(idx))
+		args = append(args, *updates.UsageBillingMultiplier)
+		idx++
+	}
 	if updates.LoadFactor != nil {
 		if *updates.LoadFactor <= 0 {
 			setClauses = append(setClauses, "load_factor = NULL")
@@ -3036,6 +3055,11 @@ func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates
 			shouldSync = true
 		}
 		if updates.Schedulable != nil && !*updates.Schedulable {
+			shouldSync = true
+		}
+		if updates.UsageBillingMultiplier != nil {
+			// Financial settings must become effective in the routing snapshot as
+			// soon as the transaction commits, even if the outbox worker is delayed.
 			shouldSync = true
 		}
 		if shouldSync {
@@ -3367,6 +3391,7 @@ func accountEntityToService(m *dbent.Account) *service.Account {
 	}
 
 	rateMultiplier := m.RateMultiplier
+	usageBillingMultiplier := m.UsageBillingMultiplier
 
 	return &service.Account{
 		ID:                      m.ID,
@@ -3381,6 +3406,7 @@ func accountEntityToService(m *dbent.Account) *service.Account {
 		Concurrency:             m.Concurrency,
 		Priority:                m.Priority,
 		RateMultiplier:          &rateMultiplier,
+		UsageBillingMultiplier:  &usageBillingMultiplier,
 		LoadFactor:              m.LoadFactor,
 		Status:                  m.Status,
 		ErrorMessage:            derefString(m.ErrorMessage),

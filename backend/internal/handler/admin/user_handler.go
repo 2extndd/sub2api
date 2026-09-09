@@ -73,6 +73,11 @@ type CreateUserRequest struct {
 
 // UpdateUserRequest represents admin update user request
 // 使用指针类型来区分"未提供"和"设置为0"
+type ReplaceUserAccountDenialsRequest struct {
+	ExpectedRevision *int64  `json:"expected_revision" binding:"required,min=0"`
+	AccountIDs       []int64 `json:"account_ids" binding:"max=500"`
+}
+
 type UpdateUserRequest struct {
 	Email                string   `json:"email" binding:"omitempty,email"`
 	Password             string   `json:"password" binding:"omitempty,min=6"`
@@ -262,6 +267,53 @@ func (h *UserHandler) BindAuthIdentity(c *gin.Context) {
 	}
 
 	result, err := h.adminService.BindUserAuthIdentity(c.Request.Context(), userID, input)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+// GetAccountDenials returns a user's explicit upstream account deny-list.
+// GET /api/v1/admin/users/:id/account-denials
+func (h *UserHandler) GetAccountDenials(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || userID <= 0 {
+		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+	denialService, ok := h.adminService.(service.UserAccountDenialAdminService)
+	if !ok {
+		response.InternalError(c, "User account denial service is not configured")
+		return
+	}
+	result, err := denialService.GetUserAccountDenials(c.Request.Context(), userID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+// ReplaceAccountDenials atomically replaces a user's deny-list.
+// PUT /api/v1/admin/users/:id/account-denials
+func (h *UserHandler) ReplaceAccountDenials(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || userID <= 0 {
+		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+	var req ReplaceUserAccountDenialsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	denialService, ok := h.adminService.(service.UserAccountDenialAdminService)
+	if !ok {
+		response.InternalError(c, "User account denial service is not configured")
+		return
+	}
+	result, err := denialService.ReplaceUserAccountDenials(c.Request.Context(), userID, *req.ExpectedRevision, req.AccountIDs)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

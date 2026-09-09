@@ -207,6 +207,9 @@ func (s *FailoverState) HandleFailoverError(
 	if failoverErr == nil || !failoverErr.ShouldRetryNextAccount() {
 		return FailoverExhausted
 	}
+	if failoverErr.ResponseCommitted && !failoverErr.SafeToFailoverAfterWrite {
+		return FailoverExhausted
+	}
 
 	// 同账号重试不算切换账号，粘性会话仅在实际切换时强制缓存计费。
 	retryCount := s.SameAccountRetryCount[accountID]
@@ -233,8 +236,10 @@ func (s *FailoverState) HandleFailoverError(
 		return FailoverContinue
 	}
 
-	// 同账号重试用尽，执行临时封禁
-	if failoverErr.RetryableOnSameAccount {
+	// Same-account retries and durable transport faults both trigger the
+	// account-level cooldown before switching; provider-scoped transient errors
+	// remain observable without quarantining one account prematurely.
+	if failoverErr.RetryableOnSameAccount || failoverErr.Persistent {
 		gatewayService.TempUnscheduleRetryableError(ctx, accountID, failoverErr)
 	}
 

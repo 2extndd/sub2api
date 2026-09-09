@@ -698,6 +698,20 @@ type UpstreamFailoverError struct {
 	NextAccountAction        NextAccountAction
 	ClientStatusCode         int
 	ClientMessage            string
+
+	// Universal failure diagnostics. These fields are bounded and safe to persist
+	// in aggregate operations telemetry; they never contain request content.
+	FailureClass      GatewayFailureClass
+	RetryDisposition  GatewayRetryDisposition
+	StatusKnown       bool
+	Persistent        bool
+	ResponseCommitted bool
+	NetworkErrorType  string
+	ProviderErrorType string
+	ProviderErrorCode string
+	RetryAfterSeconds int
+	TextCategory      string
+	TextSignature     string
 }
 
 func (e *UpstreamFailoverError) Error() string {
@@ -739,7 +753,14 @@ func (e *sseStreamErrorEventError) Error() string { return "have error in stream
 // TempUnscheduleRetryableError 对 RetryableOnSameAccount 类型的 failover 错误触发临时封禁。
 // 由 handler 层在同账号重试全部用尽、切换账号时调用。
 func (s *GatewayService) TempUnscheduleRetryableError(ctx context.Context, accountID int64, failoverErr *UpstreamFailoverError) {
-	if failoverErr == nil || !failoverErr.RetryableOnSameAccount {
+	if failoverErr == nil || (!failoverErr.RetryableOnSameAccount && !failoverErr.Persistent) {
+		return
+	}
+	// Prefer the universal class; retain status-based behavior for legacy errors.
+	switch failoverErr.FailureClass {
+	case GatewayFailureDNS, GatewayFailureTLS, GatewayFailureProxyAuth,
+		GatewayFailureConnectionRefused, GatewayFailureNetworkUnreachable:
+		tempUnscheduleEmptyResponse(ctx, s.accountRepo, accountID, "[handler]")
 		return
 	}
 	// 请求级瞬时故障与账号健康无关：封禁只会把与故障无关的账号一并摘掉，
@@ -918,7 +939,8 @@ func (s *GatewayService) GenerateSessionHash(parsed *ParsedRequest) string {
 		return hash
 	}
 
-	// 3. 最后 fallback: 使用 session上下文 + system + 所有消息的完整摘要串
+	// 3. 最后 fallback: 使用 session 上下文 + 可复用 prompt 前缀；
+	// 无稳定前缀时退回首个 conversation turn，避免把无关请求聚成一个热点。
 	var combined strings.Builder
 	// 混入请求上下文区分因子，避免不同用户相同消息产生相同 hash
 	if parsed.SessionContext != nil {
@@ -933,14 +955,21 @@ func (s *GatewayService) GenerateSessionHash(parsed *ParsedRequest) string {
 		_, _ = combined.WriteString(systemText)
 	}
 	contentStart := combined.Len()
-	appendMessageTextsFromRaw(&combined, parsed.MessagesRaw())
+	hashSource := "message_content_fallback"
+	if usesStableConversationAffinity(parsed.protocol) {
+		if appendStableConversationAffinity(&combined, parsed) {
+			hashSource = "conversation_prefix_fallback"
+		}
+	} else {
+		appendMessageTextsFromRaw(&combined, parsed.MessagesRaw())
+	}
 	if combined.Len() == contentStart {
 		appendResponsesSessionAnchorFromRaw(&combined, parsed.InputRaw())
 	}
 	if combined.Len() > 0 {
 		hash := s.hashContent(combined.String())
 		slog.Info("sticky.hash_source",
-			"source", "message_content_fallback",
+			"source", hashSource,
 			"hash", hash,
 			"content_len", combined.Len(),
 		)

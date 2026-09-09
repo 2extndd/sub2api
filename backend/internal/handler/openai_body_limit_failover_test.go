@@ -57,3 +57,66 @@ func bodyLimitFailoverTestError() *service.UpstreamFailoverError {
 		ClientMessage:     "Request payload is too large",
 	}
 }
+
+func TestOpenAIBodyLimitFailureDomain_BlocksSiblingRelayAccountsOnly(t *testing.T) {
+	proxyID := int64(7)
+	otherProxyID := int64(8)
+	first := &service.Account{
+		Platform: service.PlatformOpenAI,
+		Type:     service.AccountTypeAPIKey,
+		ProxyID:  &proxyID,
+		Credentials: map[string]any{
+			"base_url": "https://relay.example.test/v1/",
+		},
+	}
+	sibling := &service.Account{
+		Platform: service.PlatformOpenAI,
+		Type:     service.AccountTypeAPIKey,
+		ProxyID:  &proxyID,
+		Credentials: map[string]any{
+			"base_url": "https://relay.example.test/v1",
+		},
+	}
+	differentRelay := &service.Account{
+		Platform: service.PlatformOpenAI,
+		Type:     service.AccountTypeAPIKey,
+		ProxyID:  &proxyID,
+		Credentials: map[string]any{
+			"base_url": "https://fallback.example.test/v1",
+		},
+	}
+	differentProxy := &service.Account{
+		Platform: service.PlatformOpenAI,
+		Type:     service.AccountTypeAPIKey,
+		ProxyID:  &otherProxyID,
+		Credentials: map[string]any{
+			"base_url": "https://relay.example.test/v1",
+		},
+	}
+
+	domains := make(map[string]struct{})
+	recordOpenAIBodyLimitFailureDomain(domains, first, bodyLimitFailoverTestError())
+
+	require.True(t, openAIBodyLimitFailureDomainBlocked(domains, sibling))
+	require.False(t, openAIBodyLimitFailureDomainBlocked(domains, differentRelay))
+	require.False(t, openAIBodyLimitFailureDomainBlocked(domains, differentProxy))
+}
+
+func TestOpenAIBodyLimitFailureDomain_IgnoresOtherErrorsAndOAuth(t *testing.T) {
+	apiKeyAccount := &service.Account{
+		Platform:    service.PlatformOpenAI,
+		Type:        service.AccountTypeAPIKey,
+		Credentials: map[string]any{"base_url": "https://relay.example.test/v1"},
+	}
+	oauthAccount := &service.Account{
+		Platform: service.PlatformOpenAI,
+		Type:     service.AccountTypeOAuth,
+	}
+	domains := make(map[string]struct{})
+
+	recordOpenAIBodyLimitFailureDomain(domains, apiKeyAccount, &service.UpstreamFailoverError{StatusCode: http.StatusBadGateway})
+	recordOpenAIBodyLimitFailureDomain(domains, oauthAccount, bodyLimitFailoverTestError())
+
+	require.Empty(t, domains)
+	require.False(t, openAIBodyLimitFailureDomainBlocked(domains, apiKeyAccount))
+}

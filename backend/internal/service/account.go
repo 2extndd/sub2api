@@ -6,6 +6,7 @@ import (
 	"errors"
 	"hash/fnv"
 	"log/slog"
+	"math"
 	"net/url"
 	"reflect"
 	"sort"
@@ -35,15 +36,18 @@ type Account struct {
 	Priority                int
 	// RateMultiplier 账号计费倍率（>=0，允许 0 表示该账号计费为 0）。
 	// 使用指针用于兼容旧版本调度缓存（Redis）中缺字段的情况：nil 表示按 1.0 处理。
-	RateMultiplier     *float64
-	LoadFactor         *int // 调度负载因子；nil 表示使用 Concurrency
-	Status             string
-	ErrorMessage       string
-	LastUsedAt         *time.Time
-	ExpiresAt          *time.Time
-	AutoPauseOnExpired bool
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
+	RateMultiplier *float64
+	// UsageBillingMultiplier is applied once to the final customer charge for this routing account.
+	// nil supports scheduler-cache rows written before the field existed.
+	UsageBillingMultiplier *float64
+	LoadFactor             *int // 调度负载因子；nil 表示使用 Concurrency
+	Status                 string
+	ErrorMessage           string
+	LastUsedAt             *time.Time
+	ExpiresAt              *time.Time
+	AutoPauseOnExpired     bool
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
 
 	Schedulable bool
 
@@ -104,6 +108,11 @@ const (
 	// credentials["openai_capabilities"] 配置集。仅用于生图意图的 /v1/responses
 	// 调度，避免把请求调度到会在 forward 阶段被降级为 Chat Completions 的账号（#4417）。
 	OpenAIEndpointCapabilityResponses OpenAIEndpointCapability = "responses"
+	// OpenAIEndpointCapabilityImages 表示 APIKey 账号可以使用 /v1/images/* 端点。
+	// 未配置此能力的 APIKey 账号将被拒绝直接图像生成请求。OAuth 账号保留向后兼容性
+	// 并总是允许图像生成。同时用于 /v1/responses 生图意图的调度：需要同时具备
+	// Responses 和 Images 能力（目前仅 Responses 用于显式生图意图）。
+	OpenAIEndpointCapabilityImages OpenAIEndpointCapability = "images"
 )
 
 const openAIEndpointCapabilitiesCredentialKey = "openai_capabilities"
@@ -163,6 +172,20 @@ func (a *Account) BillingRateMultiplier() float64 {
 		return 1.0
 	}
 	return *a.RateMultiplier
+}
+
+// EffectiveUsageBillingMultiplier returns the positive account-level customer
+// billing multiplier. Admin writes reject invalid values; legacy cache rows fall
+// back to 1.0 so deployment is behavior-preserving until explicitly configured.
+func (a *Account) EffectiveUsageBillingMultiplier() float64 {
+	if a == nil || a.UsageBillingMultiplier == nil {
+		return 1.0
+	}
+	value := *a.UsageBillingMultiplier
+	if value <= 0 || value > MaxUsageBillingMultiplier || math.IsNaN(value) || math.IsInf(value, 0) {
+		return 1.0
+	}
+	return value
 }
 
 func (a *Account) EffectiveLoadFactor() int {
@@ -1825,11 +1848,26 @@ func (a *Account) SupportsOpenAIEndpointCapability(capability OpenAIEndpointCapa
 		if a.Type != AccountTypeAPIKey {
 			return false
 		}
+	case OpenAIEndpointCapabilityImages:
+		// /v1/images/* 仅限 APIKey 账号。OAuth 账号保留向后兼容性（总是允许）。
+		if a.Type != AccountTypeAPIKey && a.Type != AccountTypeOAuth {
+			return false
+		}
+		// OAuth 账号无条件支持历史镜像行为（无需显式能力标记）
+		if a.Type == AccountTypeOAuth {
+			return true
+		}
+		// APIKey 账号需要显式 "images" 能力标记
 	default:
 		return false
 	}
 
 	configured, found := a.openAIEndpointCapabilitySet()
+	// Special handling for images: APIKey accounts without explicit capability
+	// configuration must be rejected. OAuth maintains backward compatibility.
+	if capability == OpenAIEndpointCapabilityImages && a.Type == AccountTypeAPIKey && !found {
+		return false
+	}
 	if !found {
 		return true
 	}
@@ -1956,7 +1994,13 @@ func (a *Account) SupportsOpenAIImageCapability(capability OpenAIImagesCapabilit
 	}
 	switch capability {
 	case OpenAIImagesCapabilityBasic, OpenAIImagesCapabilityNative:
-		return a.Type == AccountTypeOAuth || a.Type == AccountTypeSetupToken || a.Type == AccountTypeAPIKey
+		// OAuth and SetupToken keep the historical implicit image support.
+		// API-key accounts must opt in through credentials["openai_capabilities"]
+		// so enabling a group's image flag cannot route traffic to unverified text accounts.
+		if a.Type == AccountTypeSetupToken {
+			return true
+		}
+		return a.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityImages)
 	default:
 		return true
 	}

@@ -154,6 +154,11 @@ func ActualCost(v float64) predicate.BatchImageJob {
 	return predicate.BatchImageJob(sql.FieldEQ(FieldActualCost, v))
 }
 
+// UsageBillingMultiplier applies equality check predicate on the "usage_billing_multiplier" field. It's identical to UsageBillingMultiplierEQ.
+func UsageBillingMultiplier(v float64) predicate.BatchImageJob {
+	return predicate.BatchImageJob(sql.FieldEQ(FieldUsageBillingMultiplier, v))
+}
+
 // Currency applies equality check predicate on the "currency" field. It's identical to CurrencyEQ.
 func Currency(v string) predicate.BatchImageJob {
 	return predicate.BatchImageJob(sql.FieldEQ(FieldCurrency, v))
@@ -1392,6 +1397,46 @@ func ActualCostIsNil() predicate.BatchImageJob {
 // ActualCostNotNil applies the NotNil predicate on the "actual_cost" field.
 func ActualCostNotNil() predicate.BatchImageJob {
 	return predicate.BatchImageJob(sql.FieldNotNull(FieldActualCost))
+}
+
+// UsageBillingMultiplierEQ applies the EQ predicate on the "usage_billing_multiplier" field.
+func UsageBillingMultiplierEQ(v float64) predicate.BatchImageJob {
+	return predicate.BatchImageJob(sql.FieldEQ(FieldUsageBillingMultiplier, v))
+}
+
+// UsageBillingMultiplierNEQ applies the NEQ predicate on the "usage_billing_multiplier" field.
+func UsageBillingMultiplierNEQ(v float64) predicate.BatchImageJob {
+	return predicate.BatchImageJob(sql.FieldNEQ(FieldUsageBillingMultiplier, v))
+}
+
+// UsageBillingMultiplierIn applies the In predicate on the "usage_billing_multiplier" field.
+func UsageBillingMultiplierIn(vs ...float64) predicate.BatchImageJob {
+	return predicate.BatchImageJob(sql.FieldIn(FieldUsageBillingMultiplier, vs...))
+}
+
+// UsageBillingMultiplierNotIn applies the NotIn predicate on the "usage_billing_multiplier" field.
+func UsageBillingMultiplierNotIn(vs ...float64) predicate.BatchImageJob {
+	return predicate.BatchImageJob(sql.FieldNotIn(FieldUsageBillingMultiplier, vs...))
+}
+
+// UsageBillingMultiplierGT applies the GT predicate on the "usage_billing_multiplier" field.
+func UsageBillingMultiplierGT(v float64) predicate.BatchImageJob {
+	return predicate.BatchImageJob(sql.FieldGT(FieldUsageBillingMultiplier, v))
+}
+
+// UsageBillingMultiplierGTE applies the GTE predicate on the "usage_billing_multiplier" field.
+func UsageBillingMultiplierGTE(v float64) predicate.BatchImageJob {
+	return predicate.BatchImageJob(sql.FieldGTE(FieldUsageBillingMultiplier, v))
+}
+
+// UsageBillingMultiplierLT applies the LT predicate on the "usage_billing_multiplier" field.
+func UsageBillingMultiplierLT(v float64) predicate.BatchImageJob {
+	return predicate.BatchImageJob(sql.FieldLT(FieldUsageBillingMultiplier, v))
+}
+
+// UsageBillingMultiplierLTE applies the LTE predicate on the "usage_billing_multiplier" field.
+func UsageBillingMultiplierLTE(v float64) predicate.BatchImageJob {
+	return predicate.BatchImageJob(sql.FieldLTE(FieldUsageBillingMultiplier, v))
 }
 
 // CurrencyEQ applies the EQ predicate on the "currency" field.

@@ -117,6 +117,7 @@ func provideCleanup(
 	grokOAuth *service.GrokOAuthService,
 	openAIGateway *service.OpenAIGatewayService,
 	scheduledTestRunner *service.ScheduledTestRunnerService,
+	accountRecoveryWorker *service.AccountRecoveryWorker,
 	backupSvc *service.BackupService,
 	paymentOrderExpiry *service.PaymentOrderExpiryService,
 	channelMonitorRunner *service.ChannelMonitorRunner,
@@ -127,8 +128,14 @@ func provideCleanup(
 	auditLog *service.AuditLogService,
 	openAIAutoReset *service.OpenAIQuotaAutoResetService,
 	promptAudit *securityaudit.PromptService,
+	adaptiveLatencyRuntime *service.AdaptiveLatencyRuntime,
 	pluginManager *service.PluginManager,
 ) func() {
+	// This provider is the final successful composition step. Start background
+	// telemetry only now so an earlier Wire constructor error cannot leak it.
+	if adaptiveLatencyRuntime != nil {
+		adaptiveLatencyRuntime.Start()
+	}
 	return func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -140,6 +147,12 @@ func provideCleanup(
 
 		// 应用层清理步骤可并行执行，基础设施资源（Redis/Ent）最后按顺序关闭。
 		parallelSteps := []cleanupStep{
+			{"AdaptiveLatencyRuntime", func() error {
+				if adaptiveLatencyRuntime != nil {
+					adaptiveLatencyRuntime.Stop()
+				}
+				return nil
+			}},
 			{"PluginManager", func() error {
 				if pluginManager != nil {
 					pluginManager.Stop()
@@ -335,6 +348,12 @@ func provideCleanup(
 			{"ScheduledTestRunnerService", func() error {
 				if scheduledTestRunner != nil {
 					scheduledTestRunner.Stop()
+				}
+				return nil
+			}},
+			{"AccountRecoveryWorker", func() error {
+				if accountRecoveryWorker != nil {
+					accountRecoveryWorker.Stop()
 				}
 				return nil
 			}},

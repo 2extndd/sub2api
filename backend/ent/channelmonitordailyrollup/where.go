@@ -110,6 +110,16 @@ func CountLatency(v int) predicate.ChannelMonitorDailyRollup {
 	return predicate.ChannelMonitorDailyRollup(sql.FieldEQ(FieldCountLatency, v))
 }
 
+// SumFirstTokenMs applies equality check predicate on the "sum_first_token_ms" field. It's identical to SumFirstTokenMsEQ.
+func SumFirstTokenMs(v int64) predicate.ChannelMonitorDailyRollup {
+	return predicate.ChannelMonitorDailyRollup(sql.FieldEQ(FieldSumFirstTokenMs, v))
+}
+
+// CountFirstTokenMs applies equality check predicate on the "count_first_token_ms" field. It's identical to CountFirstTokenMsEQ.
+func CountFirstTokenMs(v int) predicate.ChannelMonitorDailyRollup {
+	return predicate.ChannelMonitorDailyRollup(sql.FieldEQ(FieldCountFirstTokenMs, v))
+}
+
 // SumPingLatencyMs applies equality check predicate on the "sum_ping_latency_ms" field. It's identical to SumPingLatencyMsEQ.
 func SumPingLatencyMs(v int64) predicate.ChannelMonitorDailyRollup {
 	return predicate.ChannelMonitorDailyRollup(sql.FieldEQ(FieldSumPingLatencyMs, v))
@@ -568,6 +578,86 @@ func CountLatencyLT(v int) predicate.ChannelMonitorDailyRollup {
 // CountLatencyLTE applies the LTE predicate on the "count_latency" field.
 func CountLatencyLTE(v int) predicate.ChannelMonitorDailyRollup {
 	return predicate.ChannelMonitorDailyRollup(sql.FieldLTE(FieldCountLatency, v))
+}
+
+// SumFirstTokenMsEQ applies the EQ predicate on the "sum_first_token_ms" field.
+func SumFirstTokenMsEQ(v int64) predicate.ChannelMonitorDailyRollup {
+	return predicate.ChannelMonitorDailyRollup(sql.FieldEQ(FieldSumFirstTokenMs, v))
+}
+
+// SumFirstTokenMsNEQ applies the NEQ predicate on the "sum_first_token_ms" field.
+func SumFirstTokenMsNEQ(v int64) predicate.ChannelMonitorDailyRollup {
+	return predicate.ChannelMonitorDailyRollup(sql.FieldNEQ(FieldSumFirstTokenMs, v))
+}
+
+// SumFirstTokenMsIn applies the In predicate on the "sum_first_token_ms" field.
+func SumFirstTokenMsIn(vs ...int64) predicate.ChannelMonitorDailyRollup {
+	return predicate.ChannelMonitorDailyRollup(sql.FieldIn(FieldSumFirstTokenMs, vs...))
+}
+
+// SumFirstTokenMsNotIn applies the NotIn predicate on the "sum_first_token_ms" field.
+func SumFirstTokenMsNotIn(vs ...int64) predicate.ChannelMonitorDailyRollup {
+	return predicate.ChannelMonitorDailyRollup(sql.FieldNotIn(FieldSumFirstTokenMs, vs...))
+}
+
+// SumFirstTokenMsGT applies the GT predicate on the "sum_first_token_ms" field.
+func SumFirstTokenMsGT(v int64) predicate.ChannelMonitorDailyRollup {
+	return predicate.ChannelMonitorDailyRollup(sql.FieldGT(FieldSumFirstTokenMs, v))
+}
+
+// SumFirstTokenMsGTE applies the GTE predicate on the "sum_first_token_ms" field.
+func SumFirstTokenMsGTE(v int64) predicate.ChannelMonitorDailyRollup {
+	return predicate.ChannelMonitorDailyRollup(sql.FieldGTE(FieldSumFirstTokenMs, v))
+}
+
+// SumFirstTokenMsLT applies the LT predicate on the "sum_first_token_ms" field.
+func SumFirstTokenMsLT(v int64) predicate.ChannelMonitorDailyRollup {
+	return predicate.ChannelMonitorDailyRollup(sql.FieldLT(FieldSumFirstTokenMs, v))
+}
+
+// SumFirstTokenMsLTE applies the LTE predicate on the "sum_first_token_ms" field.
+func SumFirstTokenMsLTE(v int64) predicate.ChannelMonitorDailyRollup {
+	return predicate.ChannelMonitorDailyRollup(sql.FieldLTE(FieldSumFirstTokenMs, v))
+}
+
+// CountFirstTokenMsEQ applies the EQ predicate on the "count_first_token_ms" field.
+func CountFirstTokenMsEQ(v int) predicate.ChannelMonitorDailyRollup {
+	return predicate.ChannelMonitorDailyRollup(sql.FieldEQ(FieldCountFirstTokenMs, v))
+}
+
+// CountFirstTokenMsNEQ applies the NEQ predicate on the "count_first_token_ms" field.
+func CountFirstTokenMsNEQ(v int) predicate.ChannelMonitorDailyRollup {
+	return predicate.ChannelMonitorDailyRollup(sql.FieldNEQ(FieldCountFirstTokenMs, v))
+}
+
+// CountFirstTokenMsIn applies the In predicate on the "count_first_token_ms" field.
+func CountFirstTokenMsIn(vs ...int) predicate.ChannelMonitorDailyRollup {
+	return predicate.ChannelMonitorDailyRollup(sql.FieldIn(FieldCountFirstTokenMs, vs...))
+}
+
+// CountFirstTokenMsNotIn applies the NotIn predicate on the "count_first_token_ms" field.
+func CountFirstTokenMsNotIn(vs ...int) predicate.ChannelMonitorDailyRollup {
+	return predicate.ChannelMonitorDailyRollup(sql.FieldNotIn(FieldCountFirstTokenMs, vs...))
+}
+
+// CountFirstTokenMsGT applies the GT predicate on the "count_first_token_ms" field.
+func CountFirstTokenMsGT(v int) predicate.ChannelMonitorDailyRollup {
+	return predicate.ChannelMonitorDailyRollup(sql.FieldGT(FieldCountFirstTokenMs, v))
+}
+
+// CountFirstTokenMsGTE applies the GTE predicate on the "count_first_token_ms" field.
+func CountFirstTokenMsGTE(v int) predicate.ChannelMonitorDailyRollup {
+	return predicate.ChannelMonitorDailyRollup(sql.FieldGTE(FieldCountFirstTokenMs, v))
+}
+
+// CountFirstTokenMsLT applies the LT predicate on the "count_first_token_ms" field.
+func CountFirstTokenMsLT(v int) predicate.ChannelMonitorDailyRollup {
+	return predicate.ChannelMonitorDailyRollup(sql.FieldLT(FieldCountFirstTokenMs, v))
+}
+
+// CountFirstTokenMsLTE applies the LTE predicate on the "count_first_token_ms" field.
+func CountFirstTokenMsLTE(v int) predicate.ChannelMonitorDailyRollup {
+	return predicate.ChannelMonitorDailyRollup(sql.FieldLTE(FieldCountFirstTokenMs, v))
 }
 
 // SumPingLatencyMsEQ applies the EQ predicate on the "sum_ping_latency_ms" field.

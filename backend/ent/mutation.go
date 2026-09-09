@@ -2304,6 +2304,8 @@ type AccountMutation struct {
 	addpriority                 *int
 	rate_multiplier             *float64
 	addrate_multiplier          *float64
+	usage_billing_multiplier    *float64
+	addusage_billing_multiplier *float64
 	status                      *string
 	error_message               *string
 	last_used_at                *time.Time
@@ -3141,6 +3143,62 @@ func (m *AccountMutation) AddedRateMultiplier() (r float64, exists bool) {
 func (m *AccountMutation) ResetRateMultiplier() {
 	m.rate_multiplier = nil
 	m.addrate_multiplier = nil
+}
+
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (m *AccountMutation) SetUsageBillingMultiplier(f float64) {
+	m.usage_billing_multiplier = &f
+	m.addusage_billing_multiplier = nil
+}
+
+// UsageBillingMultiplier returns the value of the "usage_billing_multiplier" field in the mutation.
+func (m *AccountMutation) UsageBillingMultiplier() (r float64, exists bool) {
+	v := m.usage_billing_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUsageBillingMultiplier returns the old "usage_billing_multiplier" field's value of the Account entity.
+// If the Account object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMutation) OldUsageBillingMultiplier(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUsageBillingMultiplier is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUsageBillingMultiplier requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUsageBillingMultiplier: %w", err)
+	}
+	return oldValue.UsageBillingMultiplier, nil
+}
+
+// AddUsageBillingMultiplier adds f to the "usage_billing_multiplier" field.
+func (m *AccountMutation) AddUsageBillingMultiplier(f float64) {
+	if m.addusage_billing_multiplier != nil {
+		*m.addusage_billing_multiplier += f
+	} else {
+		m.addusage_billing_multiplier = &f
+	}
+}
+
+// AddedUsageBillingMultiplier returns the value that was added to the "usage_billing_multiplier" field in this mutation.
+func (m *AccountMutation) AddedUsageBillingMultiplier() (r float64, exists bool) {
+	v := m.addusage_billing_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUsageBillingMultiplier resets all changes to the "usage_billing_multiplier" field.
+func (m *AccountMutation) ResetUsageBillingMultiplier() {
+	m.usage_billing_multiplier = nil
+	m.addusage_billing_multiplier = nil
 }
 
 // SetStatus sets the "status" field.
@@ -4138,7 +4196,7 @@ func (m *AccountMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AccountMutation) Fields() []string {
-	fields := make([]string, 0, 31)
+	fields := make([]string, 0, 32)
 	if m.created_at != nil {
 		fields = append(fields, account.FieldCreatedAt)
 	}
@@ -4183,6 +4241,9 @@ func (m *AccountMutation) Fields() []string {
 	}
 	if m.rate_multiplier != nil {
 		fields = append(fields, account.FieldRateMultiplier)
+	}
+	if m.usage_billing_multiplier != nil {
+		fields = append(fields, account.FieldUsageBillingMultiplier)
 	}
 	if m.status != nil {
 		fields = append(fields, account.FieldStatus)
@@ -4270,6 +4331,8 @@ func (m *AccountMutation) Field(name string) (ent.Value, bool) {
 		return m.Priority()
 	case account.FieldRateMultiplier:
 		return m.RateMultiplier()
+	case account.FieldUsageBillingMultiplier:
+		return m.UsageBillingMultiplier()
 	case account.FieldStatus:
 		return m.Status()
 	case account.FieldErrorMessage:
@@ -4341,6 +4404,8 @@ func (m *AccountMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldPriority(ctx)
 	case account.FieldRateMultiplier:
 		return m.OldRateMultiplier(ctx)
+	case account.FieldUsageBillingMultiplier:
+		return m.OldUsageBillingMultiplier(ctx)
 	case account.FieldStatus:
 		return m.OldStatus(ctx)
 	case account.FieldErrorMessage:
@@ -4487,6 +4552,13 @@ func (m *AccountMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetRateMultiplier(v)
 		return nil
+	case account.FieldUsageBillingMultiplier:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUsageBillingMultiplier(v)
+		return nil
 	case account.FieldStatus:
 		v, ok := value.(string)
 		if !ok {
@@ -4622,6 +4694,9 @@ func (m *AccountMutation) AddedFields() []string {
 	if m.addrate_multiplier != nil {
 		fields = append(fields, account.FieldRateMultiplier)
 	}
+	if m.addusage_billing_multiplier != nil {
+		fields = append(fields, account.FieldUsageBillingMultiplier)
+	}
 	return fields
 }
 
@@ -4640,6 +4715,8 @@ func (m *AccountMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedPriority()
 	case account.FieldRateMultiplier:
 		return m.AddedRateMultiplier()
+	case account.FieldUsageBillingMultiplier:
+		return m.AddedUsageBillingMultiplier()
 	}
 	return nil, false
 }
@@ -4683,6 +4760,13 @@ func (m *AccountMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddRateMultiplier(v)
+		return nil
+	case account.FieldUsageBillingMultiplier:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUsageBillingMultiplier(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Account numeric field %s", name)
@@ -4860,6 +4944,9 @@ func (m *AccountMutation) ResetField(name string) error {
 		return nil
 	case account.FieldRateMultiplier:
 		m.ResetRateMultiplier()
+		return nil
+	case account.FieldUsageBillingMultiplier:
+		m.ResetUsageBillingMultiplier()
 		return nil
 	case account.FieldStatus:
 		m.ResetStatus()
@@ -11307,65 +11394,67 @@ func (m *BatchImageItemMutation) ResetEdge(name string) error {
 // BatchImageJobMutation represents an operation that mutates the BatchImageJob nodes in the graph.
 type BatchImageJobMutation struct {
 	config
-	op                  Op
-	typ                 string
-	id                  *int64
-	batch_id            *string
-	user_id             *int64
-	adduser_id          *int64
-	api_key_id          *int64
-	addapi_key_id       *int64
-	account_id          *int64
-	addaccount_id       *int64
-	provider            *string
-	model               *string
-	task_name           *string
-	status              *string
-	provider_job_name   *string
-	provider_input_ref  *string
-	provider_output_ref *string
-	gcs_input_uri       *string
-	gcs_output_uri      *string
-	item_count          *int
-	additem_count       *int
-	success_count       *int
-	addsuccess_count    *int
-	fail_count          *int
-	addfail_count       *int
-	cancelled_count     *int
-	addcancelled_count  *int
-	estimated_cost      *float64
-	addestimated_cost   *float64
-	hold_amount         *float64
-	addhold_amount      *float64
-	actual_cost         *float64
-	addactual_cost      *float64
-	currency            *string
-	hold_id             *string
-	idempotency_key     *string
-	request_hash        *string
-	manifest_hash       *string
-	retry_count         *int
-	addretry_count      *int
-	version             *int
-	addversion          *int
-	output_expires_at   *time.Time
-	input_deleted_at    *time.Time
-	output_deleted_at   *time.Time
-	downloaded_at       *time.Time
-	user_deleted_at     *time.Time
-	last_error_code     *string
-	last_error_message  *string
-	created_at          *time.Time
-	updated_at          *time.Time
-	submitted_at        *time.Time
-	started_at          *time.Time
-	finished_at         *time.Time
-	settled_at          *time.Time
-	clearedFields       map[string]struct{}
-	done                bool
-	oldValue            func(context.Context) (*BatchImageJob, error)
-	predicates          []predicate.BatchImageJob
+	op                          Op
+	typ                         string
+	id                          *int64
+	batch_id                    *string
+	user_id                     *int64
+	adduser_id                  *int64
+	api_key_id                  *int64
+	addapi_key_id               *int64
+	account_id                  *int64
+	addaccount_id               *int64
+	provider                    *string
+	model                       *string
+	task_name                   *string
+	status                      *string
+	provider_job_name           *string
+	provider_input_ref          *string
+	provider_output_ref         *string
+	gcs_input_uri               *string
+	gcs_output_uri              *string
+	item_count                  *int
+	additem_count               *int
+	success_count               *int
+	addsuccess_count            *int
+	fail_count                  *int
+	addfail_count               *int
+	cancelled_count             *int
+	addcancelled_count          *int
+	estimated_cost              *float64
+	addestimated_cost           *float64
+	hold_amount                 *float64
+	addhold_amount              *float64
+	actual_cost                 *float64
+	addactual_cost              *float64
+	usage_billing_multiplier    *float64
+	addusage_billing_multiplier *float64
+	currency                    *string
+	hold_id                     *string
+	idempotency_key             *string
+	request_hash                *string
+	manifest_hash               *string
+	retry_count                 *int
+	addretry_count              *int
+	version                     *int
+	addversion                  *int
+	output_expires_at           *time.Time
+	input_deleted_at            *time.Time
+	output_deleted_at           *time.Time
+	downloaded_at               *time.Time
+	user_deleted_at             *time.Time
+	last_error_code             *string
+	last_error_message          *string
+	created_at                  *time.Time
+	updated_at                  *time.Time
+	submitted_at                *time.Time
+	started_at                  *time.Time
+	finished_at                 *time.Time
+	settled_at                  *time.Time
+	clearedFields               map[string]struct{}
+	done                        bool
+	oldValue                    func(context.Context) (*BatchImageJob, error)
+	predicates                  []predicate.BatchImageJob
 }
 
 var _ ent.Mutation = (*BatchImageJobMutation)(nil)
@@ -12507,6 +12596,62 @@ func (m *BatchImageJobMutation) ResetActualCost() {
 	delete(m.clearedFields, batchimagejob.FieldActualCost)
 }
 
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (m *BatchImageJobMutation) SetUsageBillingMultiplier(f float64) {
+	m.usage_billing_multiplier = &f
+	m.addusage_billing_multiplier = nil
+}
+
+// UsageBillingMultiplier returns the value of the "usage_billing_multiplier" field in the mutation.
+func (m *BatchImageJobMutation) UsageBillingMultiplier() (r float64, exists bool) {
+	v := m.usage_billing_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUsageBillingMultiplier returns the old "usage_billing_multiplier" field's value of the BatchImageJob entity.
+// If the BatchImageJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BatchImageJobMutation) OldUsageBillingMultiplier(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUsageBillingMultiplier is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUsageBillingMultiplier requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUsageBillingMultiplier: %w", err)
+	}
+	return oldValue.UsageBillingMultiplier, nil
+}
+
+// AddUsageBillingMultiplier adds f to the "usage_billing_multiplier" field.
+func (m *BatchImageJobMutation) AddUsageBillingMultiplier(f float64) {
+	if m.addusage_billing_multiplier != nil {
+		*m.addusage_billing_multiplier += f
+	} else {
+		m.addusage_billing_multiplier = &f
+	}
+}
+
+// AddedUsageBillingMultiplier returns the value that was added to the "usage_billing_multiplier" field in this mutation.
+func (m *BatchImageJobMutation) AddedUsageBillingMultiplier() (r float64, exists bool) {
+	v := m.addusage_billing_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUsageBillingMultiplier resets all changes to the "usage_billing_multiplier" field.
+func (m *BatchImageJobMutation) ResetUsageBillingMultiplier() {
+	m.usage_billing_multiplier = nil
+	m.addusage_billing_multiplier = nil
+}
+
 // SetCurrency sets the "currency" field.
 func (m *BatchImageJobMutation) SetCurrency(s string) {
 	m.currency = &s
@@ -13496,7 +13641,7 @@ func (m *BatchImageJobMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *BatchImageJobMutation) Fields() []string {
-	fields := make([]string, 0, 40)
+	fields := make([]string, 0, 41)
 	if m.batch_id != nil {
 		fields = append(fields, batchimagejob.FieldBatchID)
 	}
@@ -13556,6 +13701,9 @@ func (m *BatchImageJobMutation) Fields() []string {
 	}
 	if m.actual_cost != nil {
 		fields = append(fields, batchimagejob.FieldActualCost)
+	}
+	if m.usage_billing_multiplier != nil {
+		fields = append(fields, batchimagejob.FieldUsageBillingMultiplier)
 	}
 	if m.currency != nil {
 		fields = append(fields, batchimagejob.FieldCurrency)
@@ -13665,6 +13813,8 @@ func (m *BatchImageJobMutation) Field(name string) (ent.Value, bool) {
 		return m.HoldAmount()
 	case batchimagejob.FieldActualCost:
 		return m.ActualCost()
+	case batchimagejob.FieldUsageBillingMultiplier:
+		return m.UsageBillingMultiplier()
 	case batchimagejob.FieldCurrency:
 		return m.Currency()
 	case batchimagejob.FieldHoldID:
@@ -13754,6 +13904,8 @@ func (m *BatchImageJobMutation) OldField(ctx context.Context, name string) (ent.
 		return m.OldHoldAmount(ctx)
 	case batchimagejob.FieldActualCost:
 		return m.OldActualCost(ctx)
+	case batchimagejob.FieldUsageBillingMultiplier:
+		return m.OldUsageBillingMultiplier(ctx)
 	case batchimagejob.FieldCurrency:
 		return m.OldCurrency(ctx)
 	case batchimagejob.FieldHoldID:
@@ -13943,6 +14095,13 @@ func (m *BatchImageJobMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetActualCost(v)
 		return nil
+	case batchimagejob.FieldUsageBillingMultiplier:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUsageBillingMultiplier(v)
+		return nil
 	case batchimagejob.FieldCurrency:
 		v, ok := value.(string)
 		if !ok {
@@ -14121,6 +14280,9 @@ func (m *BatchImageJobMutation) AddedFields() []string {
 	if m.addactual_cost != nil {
 		fields = append(fields, batchimagejob.FieldActualCost)
 	}
+	if m.addusage_billing_multiplier != nil {
+		fields = append(fields, batchimagejob.FieldUsageBillingMultiplier)
+	}
 	if m.addretry_count != nil {
 		fields = append(fields, batchimagejob.FieldRetryCount)
 	}
@@ -14155,6 +14317,8 @@ func (m *BatchImageJobMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedHoldAmount()
 	case batchimagejob.FieldActualCost:
 		return m.AddedActualCost()
+	case batchimagejob.FieldUsageBillingMultiplier:
+		return m.AddedUsageBillingMultiplier()
 	case batchimagejob.FieldRetryCount:
 		return m.AddedRetryCount()
 	case batchimagejob.FieldVersion:
@@ -14237,6 +14401,13 @@ func (m *BatchImageJobMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddActualCost(v)
+		return nil
+	case batchimagejob.FieldUsageBillingMultiplier:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUsageBillingMultiplier(v)
 		return nil
 	case batchimagejob.FieldRetryCount:
 		v, ok := value.(int)
@@ -14485,6 +14656,9 @@ func (m *BatchImageJobMutation) ResetField(name string) error {
 		return nil
 	case batchimagejob.FieldActualCost:
 		m.ResetActualCost()
+		return nil
+	case batchimagejob.FieldUsageBillingMultiplier:
+		m.ResetUsageBillingMultiplier()
 		return nil
 	case batchimagejob.FieldCurrency:
 		m.ResetCurrency()
@@ -16492,38 +16666,42 @@ func (m *ChannelMonitorMutation) ResetEdge(name string) error {
 // ChannelMonitorDailyRollupMutation represents an operation that mutates the ChannelMonitorDailyRollup nodes in the graph.
 type ChannelMonitorDailyRollupMutation struct {
 	config
-	op                     Op
-	typ                    string
-	id                     *int64
-	model                  *string
-	bucket_date            *time.Time
-	total_checks           *int
-	addtotal_checks        *int
-	ok_count               *int
-	addok_count            *int
-	operational_count      *int
-	addoperational_count   *int
-	degraded_count         *int
-	adddegraded_count      *int
-	failed_count           *int
-	addfailed_count        *int
-	error_count            *int
-	adderror_count         *int
-	sum_latency_ms         *int64
-	addsum_latency_ms      *int64
-	count_latency          *int
-	addcount_latency       *int
-	sum_ping_latency_ms    *int64
-	addsum_ping_latency_ms *int64
-	count_ping_latency     *int
-	addcount_ping_latency  *int
-	computed_at            *time.Time
-	clearedFields          map[string]struct{}
-	monitor                *int64
-	clearedmonitor         bool
-	done                   bool
-	oldValue               func(context.Context) (*ChannelMonitorDailyRollup, error)
-	predicates             []predicate.ChannelMonitorDailyRollup
+	op                      Op
+	typ                     string
+	id                      *int64
+	model                   *string
+	bucket_date             *time.Time
+	total_checks            *int
+	addtotal_checks         *int
+	ok_count                *int
+	addok_count             *int
+	operational_count       *int
+	addoperational_count    *int
+	degraded_count          *int
+	adddegraded_count       *int
+	failed_count            *int
+	addfailed_count         *int
+	error_count             *int
+	adderror_count          *int
+	sum_latency_ms          *int64
+	addsum_latency_ms       *int64
+	count_latency           *int
+	addcount_latency        *int
+	sum_first_token_ms      *int64
+	addsum_first_token_ms   *int64
+	count_first_token_ms    *int
+	addcount_first_token_ms *int
+	sum_ping_latency_ms     *int64
+	addsum_ping_latency_ms  *int64
+	count_ping_latency      *int
+	addcount_ping_latency   *int
+	computed_at             *time.Time
+	clearedFields           map[string]struct{}
+	monitor                 *int64
+	clearedmonitor          bool
+	done                    bool
+	oldValue                func(context.Context) (*ChannelMonitorDailyRollup, error)
+	predicates              []predicate.ChannelMonitorDailyRollup
 }
 
 var _ ent.Mutation = (*ChannelMonitorDailyRollupMutation)(nil)
@@ -17180,6 +17358,118 @@ func (m *ChannelMonitorDailyRollupMutation) ResetCountLatency() {
 	m.addcount_latency = nil
 }
 
+// SetSumFirstTokenMs sets the "sum_first_token_ms" field.
+func (m *ChannelMonitorDailyRollupMutation) SetSumFirstTokenMs(i int64) {
+	m.sum_first_token_ms = &i
+	m.addsum_first_token_ms = nil
+}
+
+// SumFirstTokenMs returns the value of the "sum_first_token_ms" field in the mutation.
+func (m *ChannelMonitorDailyRollupMutation) SumFirstTokenMs() (r int64, exists bool) {
+	v := m.sum_first_token_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSumFirstTokenMs returns the old "sum_first_token_ms" field's value of the ChannelMonitorDailyRollup entity.
+// If the ChannelMonitorDailyRollup object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelMonitorDailyRollupMutation) OldSumFirstTokenMs(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSumFirstTokenMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSumFirstTokenMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSumFirstTokenMs: %w", err)
+	}
+	return oldValue.SumFirstTokenMs, nil
+}
+
+// AddSumFirstTokenMs adds i to the "sum_first_token_ms" field.
+func (m *ChannelMonitorDailyRollupMutation) AddSumFirstTokenMs(i int64) {
+	if m.addsum_first_token_ms != nil {
+		*m.addsum_first_token_ms += i
+	} else {
+		m.addsum_first_token_ms = &i
+	}
+}
+
+// AddedSumFirstTokenMs returns the value that was added to the "sum_first_token_ms" field in this mutation.
+func (m *ChannelMonitorDailyRollupMutation) AddedSumFirstTokenMs() (r int64, exists bool) {
+	v := m.addsum_first_token_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSumFirstTokenMs resets all changes to the "sum_first_token_ms" field.
+func (m *ChannelMonitorDailyRollupMutation) ResetSumFirstTokenMs() {
+	m.sum_first_token_ms = nil
+	m.addsum_first_token_ms = nil
+}
+
+// SetCountFirstTokenMs sets the "count_first_token_ms" field.
+func (m *ChannelMonitorDailyRollupMutation) SetCountFirstTokenMs(i int) {
+	m.count_first_token_ms = &i
+	m.addcount_first_token_ms = nil
+}
+
+// CountFirstTokenMs returns the value of the "count_first_token_ms" field in the mutation.
+func (m *ChannelMonitorDailyRollupMutation) CountFirstTokenMs() (r int, exists bool) {
+	v := m.count_first_token_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCountFirstTokenMs returns the old "count_first_token_ms" field's value of the ChannelMonitorDailyRollup entity.
+// If the ChannelMonitorDailyRollup object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelMonitorDailyRollupMutation) OldCountFirstTokenMs(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCountFirstTokenMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCountFirstTokenMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCountFirstTokenMs: %w", err)
+	}
+	return oldValue.CountFirstTokenMs, nil
+}
+
+// AddCountFirstTokenMs adds i to the "count_first_token_ms" field.
+func (m *ChannelMonitorDailyRollupMutation) AddCountFirstTokenMs(i int) {
+	if m.addcount_first_token_ms != nil {
+		*m.addcount_first_token_ms += i
+	} else {
+		m.addcount_first_token_ms = &i
+	}
+}
+
+// AddedCountFirstTokenMs returns the value that was added to the "count_first_token_ms" field in this mutation.
+func (m *ChannelMonitorDailyRollupMutation) AddedCountFirstTokenMs() (r int, exists bool) {
+	v := m.addcount_first_token_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCountFirstTokenMs resets all changes to the "count_first_token_ms" field.
+func (m *ChannelMonitorDailyRollupMutation) ResetCountFirstTokenMs() {
+	m.count_first_token_ms = nil
+	m.addcount_first_token_ms = nil
+}
+
 // SetSumPingLatencyMs sets the "sum_ping_latency_ms" field.
 func (m *ChannelMonitorDailyRollupMutation) SetSumPingLatencyMs(i int64) {
 	m.sum_ping_latency_ms = &i
@@ -17389,7 +17679,7 @@ func (m *ChannelMonitorDailyRollupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ChannelMonitorDailyRollupMutation) Fields() []string {
-	fields := make([]string, 0, 14)
+	fields := make([]string, 0, 16)
 	if m.monitor != nil {
 		fields = append(fields, channelmonitordailyrollup.FieldMonitorID)
 	}
@@ -17422,6 +17712,12 @@ func (m *ChannelMonitorDailyRollupMutation) Fields() []string {
 	}
 	if m.count_latency != nil {
 		fields = append(fields, channelmonitordailyrollup.FieldCountLatency)
+	}
+	if m.sum_first_token_ms != nil {
+		fields = append(fields, channelmonitordailyrollup.FieldSumFirstTokenMs)
+	}
+	if m.count_first_token_ms != nil {
+		fields = append(fields, channelmonitordailyrollup.FieldCountFirstTokenMs)
 	}
 	if m.sum_ping_latency_ms != nil {
 		fields = append(fields, channelmonitordailyrollup.FieldSumPingLatencyMs)
@@ -17462,6 +17758,10 @@ func (m *ChannelMonitorDailyRollupMutation) Field(name string) (ent.Value, bool)
 		return m.SumLatencyMs()
 	case channelmonitordailyrollup.FieldCountLatency:
 		return m.CountLatency()
+	case channelmonitordailyrollup.FieldSumFirstTokenMs:
+		return m.SumFirstTokenMs()
+	case channelmonitordailyrollup.FieldCountFirstTokenMs:
+		return m.CountFirstTokenMs()
 	case channelmonitordailyrollup.FieldSumPingLatencyMs:
 		return m.SumPingLatencyMs()
 	case channelmonitordailyrollup.FieldCountPingLatency:
@@ -17499,6 +17799,10 @@ func (m *ChannelMonitorDailyRollupMutation) OldField(ctx context.Context, name s
 		return m.OldSumLatencyMs(ctx)
 	case channelmonitordailyrollup.FieldCountLatency:
 		return m.OldCountLatency(ctx)
+	case channelmonitordailyrollup.FieldSumFirstTokenMs:
+		return m.OldSumFirstTokenMs(ctx)
+	case channelmonitordailyrollup.FieldCountFirstTokenMs:
+		return m.OldCountFirstTokenMs(ctx)
 	case channelmonitordailyrollup.FieldSumPingLatencyMs:
 		return m.OldSumPingLatencyMs(ctx)
 	case channelmonitordailyrollup.FieldCountPingLatency:
@@ -17591,6 +17895,20 @@ func (m *ChannelMonitorDailyRollupMutation) SetField(name string, value ent.Valu
 		}
 		m.SetCountLatency(v)
 		return nil
+	case channelmonitordailyrollup.FieldSumFirstTokenMs:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSumFirstTokenMs(v)
+		return nil
+	case channelmonitordailyrollup.FieldCountFirstTokenMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCountFirstTokenMs(v)
+		return nil
 	case channelmonitordailyrollup.FieldSumPingLatencyMs:
 		v, ok := value.(int64)
 		if !ok {
@@ -17644,6 +17962,12 @@ func (m *ChannelMonitorDailyRollupMutation) AddedFields() []string {
 	if m.addcount_latency != nil {
 		fields = append(fields, channelmonitordailyrollup.FieldCountLatency)
 	}
+	if m.addsum_first_token_ms != nil {
+		fields = append(fields, channelmonitordailyrollup.FieldSumFirstTokenMs)
+	}
+	if m.addcount_first_token_ms != nil {
+		fields = append(fields, channelmonitordailyrollup.FieldCountFirstTokenMs)
+	}
 	if m.addsum_ping_latency_ms != nil {
 		fields = append(fields, channelmonitordailyrollup.FieldSumPingLatencyMs)
 	}
@@ -17674,6 +17998,10 @@ func (m *ChannelMonitorDailyRollupMutation) AddedField(name string) (ent.Value, 
 		return m.AddedSumLatencyMs()
 	case channelmonitordailyrollup.FieldCountLatency:
 		return m.AddedCountLatency()
+	case channelmonitordailyrollup.FieldSumFirstTokenMs:
+		return m.AddedSumFirstTokenMs()
+	case channelmonitordailyrollup.FieldCountFirstTokenMs:
+		return m.AddedCountFirstTokenMs()
 	case channelmonitordailyrollup.FieldSumPingLatencyMs:
 		return m.AddedSumPingLatencyMs()
 	case channelmonitordailyrollup.FieldCountPingLatency:
@@ -17742,6 +18070,20 @@ func (m *ChannelMonitorDailyRollupMutation) AddField(name string, value ent.Valu
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddCountLatency(v)
+		return nil
+	case channelmonitordailyrollup.FieldSumFirstTokenMs:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSumFirstTokenMs(v)
+		return nil
+	case channelmonitordailyrollup.FieldCountFirstTokenMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCountFirstTokenMs(v)
 		return nil
 	case channelmonitordailyrollup.FieldSumPingLatencyMs:
 		v, ok := value.(int64)
@@ -17816,6 +18158,12 @@ func (m *ChannelMonitorDailyRollupMutation) ResetField(name string) error {
 		return nil
 	case channelmonitordailyrollup.FieldCountLatency:
 		m.ResetCountLatency()
+		return nil
+	case channelmonitordailyrollup.FieldSumFirstTokenMs:
+		m.ResetSumFirstTokenMs()
+		return nil
+	case channelmonitordailyrollup.FieldCountFirstTokenMs:
+		m.ResetCountFirstTokenMs()
 		return nil
 	case channelmonitordailyrollup.FieldSumPingLatencyMs:
 		m.ResetSumPingLatencyMs()
@@ -17914,6 +18262,8 @@ type ChannelMonitorHistoryMutation struct {
 	status             *channelmonitorhistory.Status
 	latency_ms         *int
 	addlatency_ms      *int
+	first_token_ms     *int
+	addfirst_token_ms  *int
 	ping_latency_ms    *int
 	addping_latency_ms *int
 	message            *string
@@ -18203,6 +18553,76 @@ func (m *ChannelMonitorHistoryMutation) ResetLatencyMs() {
 	delete(m.clearedFields, channelmonitorhistory.FieldLatencyMs)
 }
 
+// SetFirstTokenMs sets the "first_token_ms" field.
+func (m *ChannelMonitorHistoryMutation) SetFirstTokenMs(i int) {
+	m.first_token_ms = &i
+	m.addfirst_token_ms = nil
+}
+
+// FirstTokenMs returns the value of the "first_token_ms" field in the mutation.
+func (m *ChannelMonitorHistoryMutation) FirstTokenMs() (r int, exists bool) {
+	v := m.first_token_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFirstTokenMs returns the old "first_token_ms" field's value of the ChannelMonitorHistory entity.
+// If the ChannelMonitorHistory object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelMonitorHistoryMutation) OldFirstTokenMs(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFirstTokenMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFirstTokenMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFirstTokenMs: %w", err)
+	}
+	return oldValue.FirstTokenMs, nil
+}
+
+// AddFirstTokenMs adds i to the "first_token_ms" field.
+func (m *ChannelMonitorHistoryMutation) AddFirstTokenMs(i int) {
+	if m.addfirst_token_ms != nil {
+		*m.addfirst_token_ms += i
+	} else {
+		m.addfirst_token_ms = &i
+	}
+}
+
+// AddedFirstTokenMs returns the value that was added to the "first_token_ms" field in this mutation.
+func (m *ChannelMonitorHistoryMutation) AddedFirstTokenMs() (r int, exists bool) {
+	v := m.addfirst_token_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearFirstTokenMs clears the value of the "first_token_ms" field.
+func (m *ChannelMonitorHistoryMutation) ClearFirstTokenMs() {
+	m.first_token_ms = nil
+	m.addfirst_token_ms = nil
+	m.clearedFields[channelmonitorhistory.FieldFirstTokenMs] = struct{}{}
+}
+
+// FirstTokenMsCleared returns if the "first_token_ms" field was cleared in this mutation.
+func (m *ChannelMonitorHistoryMutation) FirstTokenMsCleared() bool {
+	_, ok := m.clearedFields[channelmonitorhistory.FieldFirstTokenMs]
+	return ok
+}
+
+// ResetFirstTokenMs resets all changes to the "first_token_ms" field.
+func (m *ChannelMonitorHistoryMutation) ResetFirstTokenMs() {
+	m.first_token_ms = nil
+	m.addfirst_token_ms = nil
+	delete(m.clearedFields, channelmonitorhistory.FieldFirstTokenMs)
+}
+
 // SetPingLatencyMs sets the "ping_latency_ms" field.
 func (m *ChannelMonitorHistoryMutation) SetPingLatencyMs(i int) {
 	m.ping_latency_ms = &i
@@ -18468,7 +18888,7 @@ func (m *ChannelMonitorHistoryMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ChannelMonitorHistoryMutation) Fields() []string {
-	fields := make([]string, 0, 8)
+	fields := make([]string, 0, 9)
 	if m.monitor != nil {
 		fields = append(fields, channelmonitorhistory.FieldMonitorID)
 	}
@@ -18480,6 +18900,9 @@ func (m *ChannelMonitorHistoryMutation) Fields() []string {
 	}
 	if m.latency_ms != nil {
 		fields = append(fields, channelmonitorhistory.FieldLatencyMs)
+	}
+	if m.first_token_ms != nil {
+		fields = append(fields, channelmonitorhistory.FieldFirstTokenMs)
 	}
 	if m.ping_latency_ms != nil {
 		fields = append(fields, channelmonitorhistory.FieldPingLatencyMs)
@@ -18509,6 +18932,8 @@ func (m *ChannelMonitorHistoryMutation) Field(name string) (ent.Value, bool) {
 		return m.Status()
 	case channelmonitorhistory.FieldLatencyMs:
 		return m.LatencyMs()
+	case channelmonitorhistory.FieldFirstTokenMs:
+		return m.FirstTokenMs()
 	case channelmonitorhistory.FieldPingLatencyMs:
 		return m.PingLatencyMs()
 	case channelmonitorhistory.FieldMessage:
@@ -18534,6 +18959,8 @@ func (m *ChannelMonitorHistoryMutation) OldField(ctx context.Context, name strin
 		return m.OldStatus(ctx)
 	case channelmonitorhistory.FieldLatencyMs:
 		return m.OldLatencyMs(ctx)
+	case channelmonitorhistory.FieldFirstTokenMs:
+		return m.OldFirstTokenMs(ctx)
 	case channelmonitorhistory.FieldPingLatencyMs:
 		return m.OldPingLatencyMs(ctx)
 	case channelmonitorhistory.FieldMessage:
@@ -18579,6 +19006,13 @@ func (m *ChannelMonitorHistoryMutation) SetField(name string, value ent.Value) e
 		}
 		m.SetLatencyMs(v)
 		return nil
+	case channelmonitorhistory.FieldFirstTokenMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFirstTokenMs(v)
+		return nil
 	case channelmonitorhistory.FieldPingLatencyMs:
 		v, ok := value.(int)
 		if !ok {
@@ -18618,6 +19052,9 @@ func (m *ChannelMonitorHistoryMutation) AddedFields() []string {
 	if m.addlatency_ms != nil {
 		fields = append(fields, channelmonitorhistory.FieldLatencyMs)
 	}
+	if m.addfirst_token_ms != nil {
+		fields = append(fields, channelmonitorhistory.FieldFirstTokenMs)
+	}
 	if m.addping_latency_ms != nil {
 		fields = append(fields, channelmonitorhistory.FieldPingLatencyMs)
 	}
@@ -18631,6 +19068,8 @@ func (m *ChannelMonitorHistoryMutation) AddedField(name string) (ent.Value, bool
 	switch name {
 	case channelmonitorhistory.FieldLatencyMs:
 		return m.AddedLatencyMs()
+	case channelmonitorhistory.FieldFirstTokenMs:
+		return m.AddedFirstTokenMs()
 	case channelmonitorhistory.FieldPingLatencyMs:
 		return m.AddedPingLatencyMs()
 	}
@@ -18649,6 +19088,13 @@ func (m *ChannelMonitorHistoryMutation) AddField(name string, value ent.Value) e
 		}
 		m.AddLatencyMs(v)
 		return nil
+	case channelmonitorhistory.FieldFirstTokenMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFirstTokenMs(v)
+		return nil
 	case channelmonitorhistory.FieldPingLatencyMs:
 		v, ok := value.(int)
 		if !ok {
@@ -18666,6 +19112,9 @@ func (m *ChannelMonitorHistoryMutation) ClearedFields() []string {
 	var fields []string
 	if m.FieldCleared(channelmonitorhistory.FieldLatencyMs) {
 		fields = append(fields, channelmonitorhistory.FieldLatencyMs)
+	}
+	if m.FieldCleared(channelmonitorhistory.FieldFirstTokenMs) {
+		fields = append(fields, channelmonitorhistory.FieldFirstTokenMs)
 	}
 	if m.FieldCleared(channelmonitorhistory.FieldPingLatencyMs) {
 		fields = append(fields, channelmonitorhistory.FieldPingLatencyMs)
@@ -18692,6 +19141,9 @@ func (m *ChannelMonitorHistoryMutation) ClearField(name string) error {
 	switch name {
 	case channelmonitorhistory.FieldLatencyMs:
 		m.ClearLatencyMs()
+		return nil
+	case channelmonitorhistory.FieldFirstTokenMs:
+		m.ClearFirstTokenMs()
 		return nil
 	case channelmonitorhistory.FieldPingLatencyMs:
 		m.ClearPingLatencyMs()
@@ -18721,6 +19173,9 @@ func (m *ChannelMonitorHistoryMutation) ResetField(name string) error {
 		return nil
 	case channelmonitorhistory.FieldLatencyMs:
 		m.ResetLatencyMs()
+		return nil
+	case channelmonitorhistory.FieldFirstTokenMs:
+		m.ResetFirstTokenMs()
 		return nil
 	case channelmonitorhistory.FieldPingLatencyMs:
 		m.ResetPingLatencyMs()
@@ -44430,6 +44885,8 @@ type UsageLogMutation struct {
 	addactual_cost               *float64
 	rate_multiplier              *float64
 	addrate_multiplier           *float64
+	usage_billing_multiplier     *float64
+	addusage_billing_multiplier  *float64
 	long_context_billing_applied *bool
 	account_rate_multiplier      *float64
 	addaccount_rate_multiplier   *float64
@@ -45989,6 +46446,62 @@ func (m *UsageLogMutation) ResetRateMultiplier() {
 	m.addrate_multiplier = nil
 }
 
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (m *UsageLogMutation) SetUsageBillingMultiplier(f float64) {
+	m.usage_billing_multiplier = &f
+	m.addusage_billing_multiplier = nil
+}
+
+// UsageBillingMultiplier returns the value of the "usage_billing_multiplier" field in the mutation.
+func (m *UsageLogMutation) UsageBillingMultiplier() (r float64, exists bool) {
+	v := m.usage_billing_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUsageBillingMultiplier returns the old "usage_billing_multiplier" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldUsageBillingMultiplier(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUsageBillingMultiplier is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUsageBillingMultiplier requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUsageBillingMultiplier: %w", err)
+	}
+	return oldValue.UsageBillingMultiplier, nil
+}
+
+// AddUsageBillingMultiplier adds f to the "usage_billing_multiplier" field.
+func (m *UsageLogMutation) AddUsageBillingMultiplier(f float64) {
+	if m.addusage_billing_multiplier != nil {
+		*m.addusage_billing_multiplier += f
+	} else {
+		m.addusage_billing_multiplier = &f
+	}
+}
+
+// AddedUsageBillingMultiplier returns the value that was added to the "usage_billing_multiplier" field in this mutation.
+func (m *UsageLogMutation) AddedUsageBillingMultiplier() (r float64, exists bool) {
+	v := m.addusage_billing_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUsageBillingMultiplier resets all changes to the "usage_billing_multiplier" field.
+func (m *UsageLogMutation) ResetUsageBillingMultiplier() {
+	m.usage_billing_multiplier = nil
+	m.addusage_billing_multiplier = nil
+}
+
 // SetLongContextBillingApplied sets the "long_context_billing_applied" field.
 func (m *UsageLogMutation) SetLongContextBillingApplied(b bool) {
 	m.long_context_billing_applied = &b
@@ -47142,7 +47655,7 @@ func (m *UsageLogMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UsageLogMutation) Fields() []string {
-	fields := make([]string, 0, 47)
+	fields := make([]string, 0, 48)
 	if m.user != nil {
 		fields = append(fields, usagelog.FieldUserID)
 	}
@@ -47226,6 +47739,9 @@ func (m *UsageLogMutation) Fields() []string {
 	}
 	if m.rate_multiplier != nil {
 		fields = append(fields, usagelog.FieldRateMultiplier)
+	}
+	if m.usage_billing_multiplier != nil {
+		fields = append(fields, usagelog.FieldUsageBillingMultiplier)
 	}
 	if m.long_context_billing_applied != nil {
 		fields = append(fields, usagelog.FieldLongContextBillingApplied)
@@ -47348,6 +47864,8 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
 		return m.ActualCost()
 	case usagelog.FieldRateMultiplier:
 		return m.RateMultiplier()
+	case usagelog.FieldUsageBillingMultiplier:
+		return m.UsageBillingMultiplier()
 	case usagelog.FieldLongContextBillingApplied:
 		return m.LongContextBillingApplied()
 	case usagelog.FieldAccountRateMultiplier:
@@ -47451,6 +47969,8 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldActualCost(ctx)
 	case usagelog.FieldRateMultiplier:
 		return m.OldRateMultiplier(ctx)
+	case usagelog.FieldUsageBillingMultiplier:
+		return m.OldUsageBillingMultiplier(ctx)
 	case usagelog.FieldLongContextBillingApplied:
 		return m.OldLongContextBillingApplied(ctx)
 	case usagelog.FieldAccountRateMultiplier:
@@ -47694,6 +48214,13 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetRateMultiplier(v)
 		return nil
+	case usagelog.FieldUsageBillingMultiplier:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUsageBillingMultiplier(v)
+		return nil
 	case usagelog.FieldLongContextBillingApplied:
 		v, ok := value.(bool)
 		if !ok {
@@ -47877,6 +48404,9 @@ func (m *UsageLogMutation) AddedFields() []string {
 	if m.addrate_multiplier != nil {
 		fields = append(fields, usagelog.FieldRateMultiplier)
 	}
+	if m.addusage_billing_multiplier != nil {
+		fields = append(fields, usagelog.FieldUsageBillingMultiplier)
+	}
 	if m.addaccount_rate_multiplier != nil {
 		fields = append(fields, usagelog.FieldAccountRateMultiplier)
 	}
@@ -47934,6 +48464,8 @@ func (m *UsageLogMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedActualCost()
 	case usagelog.FieldRateMultiplier:
 		return m.AddedRateMultiplier()
+	case usagelog.FieldUsageBillingMultiplier:
+		return m.AddedUsageBillingMultiplier()
 	case usagelog.FieldAccountRateMultiplier:
 		return m.AddedAccountRateMultiplier()
 	case usagelog.FieldBillingType:
@@ -48054,6 +48586,13 @@ func (m *UsageLogMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddRateMultiplier(v)
+		return nil
+	case usagelog.FieldUsageBillingMultiplier:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUsageBillingMultiplier(v)
 		return nil
 	case usagelog.FieldAccountRateMultiplier:
 		v, ok := value.(float64)
@@ -48349,6 +48888,9 @@ func (m *UsageLogMutation) ResetField(name string) error {
 		return nil
 	case usagelog.FieldRateMultiplier:
 		m.ResetRateMultiplier()
+		return nil
+	case usagelog.FieldUsageBillingMultiplier:
+		m.ResetUsageBillingMultiplier()
 		return nil
 	case usagelog.FieldLongContextBillingApplied:
 		m.ResetLongContextBillingApplied()

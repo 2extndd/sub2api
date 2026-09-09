@@ -138,6 +138,46 @@ func TestBatchImageSettlementService_ValidationErrors(t *testing.T) {
 	}
 }
 
+func TestBatchImageSettlementService_SnapshotsOfficialAndNormalizedCostsSeparately(t *testing.T) {
+	repo := newFakeBatchImageRepository()
+	job := testSettlingBatchImageJob("imgbatch_normalized_snapshot")
+	job.SuccessCount = 2
+	job.FailCount = 0
+	job.ItemCount = 2
+	job.PricingSnapshotVersion = 1
+	job.BaseUnitPrice = 0.25
+	job.GroupRateMultiplier = 1.5
+	job.AccountRateMultiplier = 7.0
+	job.UsageBillingMultiplier = 2.0
+	job.BatchDiscountMultiplier = 0.5
+	job.HoldMultiplier = 0.5
+	job.BillableUnitPrice = 0.375
+	job.HoldUnitPrice = 0.375
+	holdAmount := 0.75
+	job.HoldAmount = &holdAmount
+	job.EstimatedCost = 0.75
+	repo.jobs[job.BatchID] = job
+	billing := &fakeBatchImageBillingRepo{}
+	usageLogs := &openAIRecordUsageLogRepoStub{}
+	svc := &BatchImageSettlementService{
+		Repo: repo, BillingRepo: billing, Pricing: &fakeBatchImagePricingResolver{unitPrice: 99},
+		UsageLogRepo: usageLogs,
+	}
+
+	result, err := svc.Settle(context.Background(), job.BatchID)
+	require.NoError(t, err)
+	require.InDelta(t, 0.75, result.ActualCost, 1e-12)
+	require.NotNil(t, usageLogs.lastLog)
+	require.InDelta(t, 0.5, usageLogs.lastLog.TotalCost, 1e-12, "official base image cost")
+	require.InDelta(t, 0.5, usageLogs.lastLog.ImageOutputCost, 1e-12)
+	require.InDelta(t, 0.75, usageLogs.lastLog.ActualCost, 1e-12, "normalized customer debit")
+	require.InDelta(t, 0.75, usageLogs.lastLog.RateMultiplier, 1e-12)
+	require.NotNil(t, usageLogs.lastLog.UsageBillingMultiplier)
+	require.InDelta(t, 2.0, *usageLogs.lastLog.UsageBillingMultiplier, 1e-12)
+	require.NotNil(t, usageLogs.lastLog.AccountRateMultiplier)
+	require.InDelta(t, 7.0, *usageLogs.lastLog.AccountRateMultiplier, 1e-12, "provider-cost multiplier stays separate")
+}
+
 func TestBatchImageSettlementService_CostExceedingHoldDoesNotCharge(t *testing.T) {
 	repo := newFakeBatchImageRepository()
 	job := testSettlingBatchImageJob("imgbatch_cost_over_hold")

@@ -539,8 +539,28 @@ func (s *OpsService) prepareErrorLogInput(ctx context.Context, entry *OpsInsertE
 	return entry, true, nil
 }
 
+func normalizeOpsCategoryPointer(value *string, normalize func(string) string) *string {
+	if value == nil {
+		return nil
+	}
+	normalized := normalize(*value)
+	if normalized == "" {
+		return nil
+	}
+	return &normalized
+}
+
 func sanitizeOpsUpstreamErrors(entry *OpsInsertErrorLogInput) error {
-	if entry == nil || len(entry.UpstreamErrors) == 0 {
+	if entry == nil {
+		return nil
+	}
+	entry.ProviderErrorType = normalizeOpsCategoryPointer(entry.ProviderErrorType, normalizeProviderField)
+	entry.ProviderErrorCode = normalizeOpsCategoryPointer(entry.ProviderErrorCode, normalizeProviderField)
+	entry.NetworkErrorType = normalizeOpsCategoryPointer(entry.NetworkErrorType, normalizeGatewayNetworkType)
+	if entry.RetryAfterSeconds != nil && (*entry.RetryAfterSeconds < 0 || *entry.RetryAfterSeconds > 3600) {
+		entry.RetryAfterSeconds = nil
+	}
+	if len(entry.UpstreamErrors) == 0 {
 		return nil
 	}
 
@@ -570,6 +590,16 @@ func sanitizeOpsUpstreamErrors(entry *OpsInsertErrorLogInput) error {
 		out.Stage = truncateString(strings.TrimSpace(out.Stage), 64)
 		out.Scope = truncateString(strings.TrimSpace(out.Scope), 64)
 		out.Reason = truncateString(strings.TrimSpace(out.Reason), 128)
+		out.FailureClass = normalizeGatewayFailureClass(out.FailureClass)
+		out.RetryDisposition = normalizeGatewayRetryDisposition(out.RetryDisposition)
+		out.NetworkErrorType = normalizeGatewayNetworkType(out.NetworkErrorType)
+		out.TextCategory = normalizeGatewayTextCategory(out.TextCategory)
+		out.TextSignature = normalizeGatewayTextSignature(out.TextSignature)
+		out.ProviderErrorType = normalizeProviderField(out.ProviderErrorType)
+		out.ProviderErrorCode = normalizeProviderField(out.ProviderErrorCode)
+		if out.RetryAfterSeconds < 0 || out.RetryAfterSeconds > 3600 {
+			out.RetryAfterSeconds = 0
+		}
 
 		if out.AccountID < 0 {
 			out.AccountID = 0

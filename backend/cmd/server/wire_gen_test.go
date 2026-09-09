@@ -49,6 +49,8 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
 	idempotencyCleanupSvc := service.NewIdempotencyCleanupService(nil, cfg)
 	schedulerSnapshotSvc := service.NewSchedulerSnapshotService(nil, nil, nil, nil, cfg)
 	opsSystemLogSinkSvc := service.NewOpsSystemLogSink(nil)
+	adaptiveLatencyRuntime, err := service.NewAdaptiveLatencyRuntime(cfg, nil, nil, nil, nil, nil)
+	require.NoError(t, err)
 
 	cleanup := provideCleanup(
 		nil, // entClient
@@ -83,20 +85,22 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
 		openAIOAuthSvc,
 		geminiOAuthSvc,
 		antigravityOAuthSvc,
-		nil, // grokOAuth
-		nil, // openAIGateway
-		nil, // scheduledTestRunner
-		nil, // backupSvc
-		nil, // paymentOrderExpiry
-		nil, // channelMonitorRunner
-		nil, // channelMonitorV2Aggregator
-		nil, // quotaFlusher
-		nil, // upstreamBillingProbe
-		nil, // ollamaCloudUsage
-		nil, // auditLog
-		nil, // openAIAutoReset
-		nil, // promptAudit
-		nil, // pluginManager
+		nil,                    // grokOAuth
+		nil,                    // openAIGateway
+		nil,                    // scheduledTestRunner
+		nil,                    // accountRecoveryWorker
+		nil,                    // backupSvc
+		nil,                    // paymentOrderExpiry
+		nil,                    // channelMonitorRunner
+		nil,                    // channelMonitorV2Aggregator
+		nil,                    // quotaFlusher
+		nil,                    // upstreamBillingProbe
+		nil,                    // ollamaCloudUsage
+		nil,                    // auditLog
+		nil,                    // openAIAutoReset
+		nil,                    // promptAudit
+		adaptiveLatencyRuntime, // adaptiveLatencyRuntime
+		nil,                    // pluginManager
 	)
 
 	require.NotPanics(t, func() {

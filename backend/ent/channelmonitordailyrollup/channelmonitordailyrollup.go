@@ -36,6 +36,10 @@ const (
 	FieldSumLatencyMs = "sum_latency_ms"
 	// FieldCountLatency holds the string denoting the count_latency field in the database.
 	FieldCountLatency = "count_latency"
+	// FieldSumFirstTokenMs holds the string denoting the sum_first_token_ms field in the database.
+	FieldSumFirstTokenMs = "sum_first_token_ms"
+	// FieldCountFirstTokenMs holds the string denoting the count_first_token_ms field in the database.
+	FieldCountFirstTokenMs = "count_first_token_ms"
 	// FieldSumPingLatencyMs holds the string denoting the sum_ping_latency_ms field in the database.
 	FieldSumPingLatencyMs = "sum_ping_latency_ms"
 	// FieldCountPingLatency holds the string denoting the count_ping_latency field in the database.
@@ -69,6 +73,8 @@ var Columns = []string{
 	FieldErrorCount,
 	FieldSumLatencyMs,
 	FieldCountLatency,
+	FieldSumFirstTokenMs,
+	FieldCountFirstTokenMs,
 	FieldSumPingLatencyMs,
 	FieldCountPingLatency,
 	FieldComputedAt,
@@ -103,6 +109,10 @@ var (
 	DefaultSumLatencyMs int64
 	// DefaultCountLatency holds the default value on creation for the "count_latency" field.
 	DefaultCountLatency int
+	// DefaultSumFirstTokenMs holds the default value on creation for the "sum_first_token_ms" field.
+	DefaultSumFirstTokenMs int64
+	// DefaultCountFirstTokenMs holds the default value on creation for the "count_first_token_ms" field.
+	DefaultCountFirstTokenMs int
 	// DefaultSumPingLatencyMs holds the default value on creation for the "sum_ping_latency_ms" field.
 	DefaultSumPingLatencyMs int64
 	// DefaultCountPingLatency holds the default value on creation for the "count_ping_latency" field.
@@ -174,6 +184,16 @@ func BySumLatencyMs(opts ...sql.OrderTermOption) OrderOption {
 // ByCountLatency orders the results by the count_latency field.
 func ByCountLatency(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCountLatency, opts...).ToFunc()
+}
+
+// BySumFirstTokenMs orders the results by the sum_first_token_ms field.
+func BySumFirstTokenMs(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSumFirstTokenMs, opts...).ToFunc()
+}
+
+// ByCountFirstTokenMs orders the results by the count_first_token_ms field.
+func ByCountFirstTokenMs(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCountFirstTokenMs, opts...).ToFunc()
 }
 
 // BySumPingLatencyMs orders the results by the sum_ping_latency_ms field.

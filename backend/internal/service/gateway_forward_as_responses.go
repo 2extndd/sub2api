@@ -160,19 +160,11 @@ func (s *GatewayService) ForwardAsResponses(
 		upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
 
 		if s.shouldFailoverUpstreamError(resp.StatusCode) {
-			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
-				Platform:           account.Platform,
-				AccountID:          account.ID,
-				AccountName:        account.Name,
-				UpstreamStatusCode: resp.StatusCode,
-				UpstreamRequestID:  resp.Header.Get("x-request-id"),
-				Kind:               "failover",
-				Message:            upstreamMsg,
-			})
 			shouldDisable := false
 			if s.rateLimitService != nil {
 				shouldDisable = s.rateLimitService.HandleUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, mappedModel)
 			}
+			appendResponsesUpstreamFailover(c, account, resp, respBody, upstreamMsg, "", shouldDisable)
 			return nil, &UpstreamFailoverError{
 				StatusCode:             resp.StatusCode,
 				ResponseBody:           respBody,
@@ -195,6 +187,25 @@ func (s *GatewayService) ForwardAsResponses(
 	}
 
 	return result, handleErr
+}
+
+func appendResponsesUpstreamFailover(c *gin.Context, account *Account, resp *http.Response, responseBody []byte, upstreamMsg, upstreamDetail string, forceNextAccount bool) GatewayFailurePolicy {
+	policy := ClassifyUpstreamHTTPFailure(resp.StatusCode, responseBody, resp.Header)
+	if forceNextAccount {
+		policy.Retry = GatewayRetryNextAccount
+	}
+	SetOpsFailurePolicy(c, policy)
+	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+		Platform:           account.Platform,
+		AccountID:          account.ID,
+		AccountName:        account.Name,
+		UpstreamStatusCode: resp.StatusCode,
+		UpstreamRequestID:  resp.Header.Get("x-request-id"),
+		Kind:               "failover",
+		Message:            upstreamMsg,
+		Detail:             upstreamDetail,
+	})
+	return policy
 }
 
 func adaptResponsesClientToolsForAnthropic(body []byte) ([]byte, apicompat.ResponsesClientToolMapping, error) {

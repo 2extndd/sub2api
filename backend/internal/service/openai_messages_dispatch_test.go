@@ -48,6 +48,27 @@ func TestGroupResolveMessagesDispatchModel_GrokRequiresCrossClientMapping(t *tes
 	require.Empty(t, group.ResolveMessagesDispatchModel("gpt-5.3-codex"))
 }
 
+func TestSanitizeGroupMessagesDispatchFields_PreservesCompositePlatform(t *testing.T) {
+	t.Parallel()
+
+	group := &Group{
+		Platform:              PlatformComposite,
+		AllowMessagesDispatch: true,
+		DefaultMappedModel:    "gpt-5.4",
+		MessagesDispatchModelConfig: OpenAIMessagesDispatchModelConfig{
+			ExactModelMappings: map[string]string{
+				"claude-sonnet-5": "claude-sonnet-5",
+			},
+		},
+	}
+
+	sanitizeGroupMessagesDispatchFields(group)
+
+	require.True(t, group.AllowMessagesDispatch)
+	require.Equal(t, "gpt-5.4", group.DefaultMappedModel)
+	require.Equal(t, "claude-sonnet-5", group.MessagesDispatchModelConfig.ExactModelMappings["claude-sonnet-5"])
+}
+
 func TestSanitizeGroupMessagesDispatchFields_ClearsNonOpenAIPlatform(t *testing.T) {
 	t.Parallel()
 
@@ -70,12 +91,12 @@ func TestSanitizeGroupMessagesDispatchFields_ClearsNonOpenAIPlatform(t *testing.
 	require.Equal(t, OpenAIMessagesDispatchModelConfig{}, group.MessagesDispatchModelConfig)
 }
 
-func TestSanitizeGroupMessagesDispatchFields_PreservesCompositeDispatchToggle(t *testing.T) {
+func TestSanitizeGroupMessagesDispatchFields_PreservesCompositeDispatchToggleAndForkMapping(t *testing.T) {
 	t.Parallel()
 
 	group := &Group{
 		Platform:              PlatformComposite,
-		AllowMessagesDispatch: true,
+		AllowMessagesDispatch: false,
 		DefaultMappedModel:    "gpt-5.6-sol",
 		MessagesDispatchModelConfig: OpenAIMessagesDispatchModelConfig{
 			SonnetMappedModel: "gpt-5.3-codex",
@@ -87,7 +108,8 @@ func TestSanitizeGroupMessagesDispatchFields_PreservesCompositeDispatchToggle(t 
 
 	sanitizeGroupMessagesDispatchFields(group)
 
-	require.True(t, group.AllowMessagesDispatch)
-	require.Empty(t, group.DefaultMappedModel)
-	require.Equal(t, OpenAIMessagesDispatchModelConfig{}, group.MessagesDispatchModelConfig)
+	require.False(t, group.AllowMessagesDispatch)
+	require.Equal(t, "gpt-5.6-sol", group.DefaultMappedModel)
+	require.Equal(t, "gpt-5.3-codex", group.MessagesDispatchModelConfig.SonnetMappedModel)
+	require.Equal(t, "gpt-5.6-sol", group.MessagesDispatchModelConfig.ExactModelMappings["claude-fable-5"])
 }

@@ -439,54 +439,50 @@ func (o ResponsesOutput) MarshalJSON() ([]byte, error) {
 	return json.Marshal(m)
 }
 
-// UnmarshalJSON accepts both the Responses function-call string form and the
-// tool_search_call object form for arguments. The bridge stores arguments as a
-// string internally, so object arguments are retained as their raw JSON.
-func (o *ResponsesOutput) UnmarshalJSON(data []byte) error {
-	type responsesOutputAlias ResponsesOutput
+func decodeStringOrRawJSON(raw json.RawMessage) (string, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return "", nil
+	}
 
-	var kind struct {
-		Type string `json:"type"`
-	}
-	if err := json.Unmarshal(data, &kind); err != nil {
-		return err
-	}
-	if kind.Type != "tool_search_call" {
-		var decoded responsesOutputAlias
-		if err := json.Unmarshal(data, &decoded); err != nil {
-			return err
+	if trimmed[0] == '"' {
+		var value string
+		if err := json.Unmarshal(trimmed, &value); err != nil {
+			return "", err
 		}
-		*o = ResponsesOutput(decoded)
+		return value, nil
+	}
+
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, trimmed); err != nil {
+		return "", err
+	}
+	return compact.String(), nil
+}
+
+// UnmarshalJSON accepts both the canonical string form and non-standard raw
+// JSON values for arguments. Some Responses-compatible upstreams return
+// function_call arguments as an object; the bridge stores the compact JSON as
+// a string so downstream protocol conversion can continue normally.
+func (o *ResponsesOutput) UnmarshalJSON(data []byte) error {
+	type alias ResponsesOutput
+	var wire struct {
+		*alias
+		Arguments json.RawMessage `json:"arguments"`
+	}
+
+	*o = ResponsesOutput{}
+	wire.alias = (*alias)(o)
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	if len(wire.Arguments) == 0 {
 		return nil
 	}
 
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return err
-	}
-	arguments, hasArguments := fields["arguments"]
-	delete(fields, "arguments")
-	normalized, err := json.Marshal(fields)
-	if err != nil {
-		return err
-	}
-
-	var decoded responsesOutputAlias
-	if err := json.Unmarshal(normalized, &decoded); err != nil {
-		return err
-	}
-	*o = ResponsesOutput(decoded)
-	if !hasArguments || string(arguments) == "null" {
-		return nil
-	}
-
-	var argumentString string
-	if err := json.Unmarshal(arguments, &argumentString); err == nil {
-		o.Arguments = argumentString
-	} else {
-		o.Arguments = string(arguments)
-	}
-	return nil
+	var err error
+	o.Arguments, err = decodeStringOrRawJSON(wire.Arguments)
+	return err
 }
 
 // WebSearchAction describes the search action in a web_search_call output item.
@@ -644,6 +640,30 @@ type ResponsesStreamEvent struct {
 
 	// Sequence number for ordering events
 	SequenceNumber int `json:"sequence_number,omitempty"`
+}
+
+// UnmarshalJSON applies the same tolerant arguments decoding to top-level
+// response.function_call_arguments.done events. Nested item/response arguments
+// are normalized by ResponsesOutput.UnmarshalJSON.
+func (e *ResponsesStreamEvent) UnmarshalJSON(data []byte) error {
+	type alias ResponsesStreamEvent
+	var wire struct {
+		*alias
+		Arguments json.RawMessage `json:"arguments"`
+	}
+
+	*e = ResponsesStreamEvent{}
+	wire.alias = (*alias)(e)
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	if len(wire.Arguments) == 0 {
+		return nil
+	}
+
+	var err error
+	e.Arguments, err = decodeStringOrRawJSON(wire.Arguments)
+	return err
 }
 
 // ---------------------------------------------------------------------------

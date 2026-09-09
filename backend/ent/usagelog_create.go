@@ -379,6 +379,20 @@ func (_c *UsageLogCreate) SetNillableRateMultiplier(v *float64) *UsageLogCreate 
 	return _c
 }
 
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (_c *UsageLogCreate) SetUsageBillingMultiplier(v float64) *UsageLogCreate {
+	_c.mutation.SetUsageBillingMultiplier(v)
+	return _c
+}
+
+// SetNillableUsageBillingMultiplier sets the "usage_billing_multiplier" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableUsageBillingMultiplier(v *float64) *UsageLogCreate {
+	if v != nil {
+		_c.SetUsageBillingMultiplier(*v)
+	}
+	return _c
+}
+
 // SetLongContextBillingApplied sets the "long_context_billing_applied" field.
 func (_c *UsageLogCreate) SetLongContextBillingApplied(v bool) *UsageLogCreate {
 	_c.mutation.SetLongContextBillingApplied(v)
@@ -749,6 +763,10 @@ func (_c *UsageLogCreate) defaults() {
 		v := usagelog.DefaultRateMultiplier
 		_c.mutation.SetRateMultiplier(v)
 	}
+	if _, ok := _c.mutation.UsageBillingMultiplier(); !ok {
+		v := usagelog.DefaultUsageBillingMultiplier
+		_c.mutation.SetUsageBillingMultiplier(v)
+	}
 	if _, ok := _c.mutation.LongContextBillingApplied(); !ok {
 		v := usagelog.DefaultLongContextBillingApplied
 		_c.mutation.SetLongContextBillingApplied(v)
@@ -874,6 +892,14 @@ func (_c *UsageLogCreate) check() error {
 	}
 	if _, ok := _c.mutation.RateMultiplier(); !ok {
 		return &ValidationError{Name: "rate_multiplier", err: errors.New(`ent: missing required field "UsageLog.rate_multiplier"`)}
+	}
+	if _, ok := _c.mutation.UsageBillingMultiplier(); !ok {
+		return &ValidationError{Name: "usage_billing_multiplier", err: errors.New(`ent: missing required field "UsageLog.usage_billing_multiplier"`)}
+	}
+	if v, ok := _c.mutation.UsageBillingMultiplier(); ok {
+		if err := usagelog.UsageBillingMultiplierValidator(v); err != nil {
+			return &ValidationError{Name: "usage_billing_multiplier", err: fmt.Errorf(`ent: validator failed for field "UsageLog.usage_billing_multiplier": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.LongContextBillingApplied(); !ok {
 		return &ValidationError{Name: "long_context_billing_applied", err: errors.New(`ent: missing required field "UsageLog.long_context_billing_applied"`)}
@@ -1058,6 +1084,10 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RateMultiplier(); ok {
 		_spec.SetField(usagelog.FieldRateMultiplier, field.TypeFloat64, value)
 		_node.RateMultiplier = value
+	}
+	if value, ok := _c.mutation.UsageBillingMultiplier(); ok {
+		_spec.SetField(usagelog.FieldUsageBillingMultiplier, field.TypeFloat64, value)
+		_node.UsageBillingMultiplier = value
 	}
 	if value, ok := _c.mutation.LongContextBillingApplied(); ok {
 		_spec.SetField(usagelog.FieldLongContextBillingApplied, field.TypeBool, value)
@@ -1749,6 +1779,24 @@ func (u *UsageLogUpsert) UpdateRateMultiplier() *UsageLogUpsert {
 // AddRateMultiplier adds v to the "rate_multiplier" field.
 func (u *UsageLogUpsert) AddRateMultiplier(v float64) *UsageLogUpsert {
 	u.Add(usagelog.FieldRateMultiplier, v)
+	return u
+}
+
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (u *UsageLogUpsert) SetUsageBillingMultiplier(v float64) *UsageLogUpsert {
+	u.Set(usagelog.FieldUsageBillingMultiplier, v)
+	return u
+}
+
+// UpdateUsageBillingMultiplier sets the "usage_billing_multiplier" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateUsageBillingMultiplier() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldUsageBillingMultiplier)
+	return u
+}
+
+// AddUsageBillingMultiplier adds v to the "usage_billing_multiplier" field.
+func (u *UsageLogUpsert) AddUsageBillingMultiplier(v float64) *UsageLogUpsert {
+	u.Add(usagelog.FieldUsageBillingMultiplier, v)
 	return u
 }
 
@@ -2684,6 +2732,27 @@ func (u *UsageLogUpsertOne) AddRateMultiplier(v float64) *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) UpdateRateMultiplier() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateRateMultiplier()
+	})
+}
+
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (u *UsageLogUpsertOne) SetUsageBillingMultiplier(v float64) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUsageBillingMultiplier(v)
+	})
+}
+
+// AddUsageBillingMultiplier adds v to the "usage_billing_multiplier" field.
+func (u *UsageLogUpsertOne) AddUsageBillingMultiplier(v float64) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddUsageBillingMultiplier(v)
+	})
+}
+
+// UpdateUsageBillingMultiplier sets the "usage_billing_multiplier" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateUsageBillingMultiplier() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUsageBillingMultiplier()
 	})
 }
 
@@ -3840,6 +3909,27 @@ func (u *UsageLogUpsertBulk) AddRateMultiplier(v float64) *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) UpdateRateMultiplier() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateRateMultiplier()
+	})
+}
+
+// SetUsageBillingMultiplier sets the "usage_billing_multiplier" field.
+func (u *UsageLogUpsertBulk) SetUsageBillingMultiplier(v float64) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUsageBillingMultiplier(v)
+	})
+}
+
+// AddUsageBillingMultiplier adds v to the "usage_billing_multiplier" field.
+func (u *UsageLogUpsertBulk) AddUsageBillingMultiplier(v float64) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddUsageBillingMultiplier(v)
+	})
+}
+
+// UpdateUsageBillingMultiplier sets the "usage_billing_multiplier" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateUsageBillingMultiplier() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUsageBillingMultiplier()
 	})
 }
 

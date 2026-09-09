@@ -209,6 +209,7 @@ func buildStatusSummary(
 		}
 		if a, ok := availByModel[primary]; ok {
 			summary.Availability7d = a.AvailabilityPct
+			summary.AvgFirstToken7dMs = a.AvgFirstTokenMs
 		}
 	}
 	for _, model := range extras {
@@ -231,16 +232,17 @@ func buildUserViewFromSummary(
 	timelineEntries []*ChannelMonitorHistoryEntry,
 ) *UserMonitorView {
 	view := &UserMonitorView{
-		ID:               m.ID,
-		Name:             m.Name,
-		Provider:         m.Provider,
-		GroupName:        m.GroupName,
-		PrimaryModel:     m.PrimaryModel,
-		PrimaryStatus:    summary.PrimaryStatus,
-		PrimaryLatencyMs: summary.PrimaryLatencyMs,
-		Availability7d:   summary.Availability7d,
-		ExtraModels:      summary.ExtraModels,
-		Timeline:         buildTimelinePoints(timelineEntries),
+		ID:                m.ID,
+		Name:              m.Name,
+		Provider:          m.Provider,
+		GroupName:         m.GroupName,
+		PrimaryModel:      m.PrimaryModel,
+		PrimaryStatus:     summary.PrimaryStatus,
+		PrimaryLatencyMs:  summary.PrimaryLatencyMs,
+		AvgFirstToken7dMs: summary.AvgFirstToken7dMs,
+		Availability7d:    summary.Availability7d,
+		ExtraModels:       summary.ExtraModels,
+		Timeline:          buildTimelinePoints(timelineEntries),
 	}
 	if primaryLatest != nil {
 		view.PrimaryPingLatencyMs = primaryLatest.PingLatencyMs
@@ -256,6 +258,7 @@ func buildTimelinePoints(entries []*ChannelMonitorHistoryEntry) []UserMonitorTim
 		out = append(out, UserMonitorTimelinePoint{
 			Status:        e.Status,
 			LatencyMs:     e.LatencyMs,
+			FirstTokenMs:  e.FirstTokenMs,
 			PingLatencyMs: e.PingLatencyMs,
 			CheckedAt:     e.CheckedAt,
 		})
@@ -282,6 +285,7 @@ func mergeModelDetails(
 		if a, ok := availMap[monitorAvailability7Days][model]; ok {
 			d.Availability7d = a.AvailabilityPct
 			d.AvgLatency7dMs = a.AvgLatencyMs
+			d.AvgFirstToken7dMs = a.AvgFirstTokenMs
 		}
 		if a, ok := availMap[monitorAvailability15Days][model]; ok {
 			d.Availability15d = a.AvailabilityPct

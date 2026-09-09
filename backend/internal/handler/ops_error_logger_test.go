@@ -1954,3 +1954,36 @@ func TestGetOpsAPIKeyPrefersPrimaryContextKey(t *testing.T) {
 	require.NotNil(t, got)
 	require.Equal(t, int64(1), got.ID, "已鉴权请求应优先使用正式 api key")
 }
+
+func TestApplyOpsUpstreamFieldsFromContextCopiesBoundedDiagnostics(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+
+	policy := service.ClassifyUpstreamHTTPFailure(
+		http.StatusTooManyRequests,
+		[]byte(`{"error":{"type":"rate_limit_error","code":"rate_limit_exceeded"}}`),
+		http.Header{"Retry-After": []string{"42"}},
+	)
+	service.SetOpsFailurePolicy(c, policy)
+	c.Set(service.OpsUpstreamErrorsKey, []*service.OpsUpstreamErrorEvent{{
+		UpstreamStatusCode: http.StatusTooManyRequests,
+		Stage:              string(service.GatewayFailureStageInference),
+		ProviderErrorType:  policy.ProviderType,
+		ProviderErrorCode:  policy.ProviderCode,
+		FailureClass:       string(policy.Class),
+		RetryDisposition:   string(policy.Retry),
+	}})
+
+	entry := &service.OpsInsertErrorLogInput{}
+	applyOpsUpstreamFieldsFromContext(c, entry)
+
+	require.NotNil(t, entry.ProviderErrorType)
+	require.Equal(t, "rate_limit_error", *entry.ProviderErrorType)
+	require.NotNil(t, entry.ProviderErrorCode)
+	require.Equal(t, "rate_limit_exceeded", *entry.ProviderErrorCode)
+	require.NotNil(t, entry.RetryAfterSeconds)
+	require.Equal(t, 42, *entry.RetryAfterSeconds)
+	require.NotNil(t, entry.UpstreamStatusCode)
+	require.Equal(t, http.StatusTooManyRequests, *entry.UpstreamStatusCode)
+}

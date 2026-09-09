@@ -456,7 +456,23 @@ func applyOpenAIImagesDefaults(req *OpenAIImagesRequest) {
 }
 
 func isOpenAIImageGenerationModel(model string) bool {
-	return IsGPTImageGenerationModel(model) || isGrokImageGenerationModel(model)
+	// Gemini image aliases can arrive through the OpenAI-compatible endpoint
+	// (for example, the subrouter accounts). Keep them on the image billing path
+	// even when the upstream response does not use OpenAI's image item schema.
+	return IsGPTImageGenerationModel(model) || isGrokImageGenerationModel(model) || isImageGenerationModel(model)
+}
+
+func resolveOpenAIImageCount(parsedCount int, originalModel, upstreamModel string) int {
+	if parsedCount > 0 {
+		return parsedCount
+	}
+	// Gemini image responses can use a provider-specific content shape that the
+	// OpenAI output counter cannot inspect. The model is authoritative for the
+	// native Gemini image endpoint; keep GPT/Grok tool calls response-driven.
+	if isImageGenerationModel(originalModel) || isImageGenerationModel(upstreamModel) {
+		return 1
+	}
+	return 0
 }
 
 // IsGPTImageGenerationModel identifies the GPT native image-generation model family.

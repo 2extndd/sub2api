@@ -499,6 +499,7 @@ export default {
     latencyEmpty: '-',
     availabilityPrefix: 'Availability',
     dialogLatency: 'Dialog Latency',
+    avgTTFT7d: 'Avg TTFT · 7d',
     endpointPing: 'Endpoint PING',
     history60pts: 'HISTORY ({n} PTS)',
     nextUpdateIn: 'NEXT UPDATE IN {n}s',
@@ -549,7 +550,8 @@ export default {
       availability7d: '7d Availability',
       availability15d: '15d Availability',
       availability30d: '30d Availability',
-      avgLatency7d: '7d Avg Latency (ms)'
+      avgLatency7d: '7d Avg Latency (ms)',
+      avgTTFT7d: '7d Avg TTFT (ms)'
     },
     empty: {
       title: 'No channels available',
