@@ -651,6 +651,14 @@ export default {
       apiKeyRequired: 'API Key *',
       apiKeyPlaceholder: 'sk-ant-api03-...',
       apiKeyHint: '您的 Claude Console API Key',
+      upstreamRequestIdHeader: '上游ID',
+      upstreamRequestIdHeaderPlaceholder: '留空不记录',
+      upstreamRequestIdHeaderHelp: {
+        intro: '填写直接上游在响应头中声明请求标识的头名，记录到用量明细的“上游ID”列；留空则不记录。',
+        examplesTitle: '常见取值',
+        sub2apiNote: '对应对方用量明细的请求ID列',
+        official: '{platform} 官方 API'
+      },
       // OpenAI specific hints
       openai: {
         baseUrlHint: '留空使用官方 OpenAI API',
@@ -690,6 +698,10 @@ export default {
         responsesModeAuto: '自动',
         responsesModeForceResponses: '强制 Responses',
         responsesModeForceChatCompletions: '强制 Chat Completions',
+        responsesModeTextDisabledHint: '未启用文本生成（Responses 或 Chat Completions）时（包括图片专用账号），此设置不适用。',
+        imagesUrlToB64Json: '生图结果 URL 转 base64',
+        imagesUrlToB64JsonDesc:
+          '仅对 OpenAI API Key 的 Images 非流式响应生效。上游返回的图片缺少 b64_json 但带 url 时，网关下载该 url 并以 base64 回填 b64_json（url 保留），兼容按官方接口实现的客户端；下载失败则原样返回。',
         endpointCapabilities: '端点能力',
         endpointCapabilitiesDesc:
           '用于调度筛选。文本端点会跟随上方 Responses API 支持显示为 Responses、Chat Completions 或自动模式；Embeddings 独立控制 /v1/embeddings；图片生成独立控制 /v1/images。',
@@ -704,7 +716,6 @@ export default {
         imageGenerationOnlyDesc: '仅启用图片生成端点，其他端点将被禁用。图片专用账号不支持 Responses 模式配置。',
         responsesStatusAutoSupported: '自动探测：Responses',
         responsesStatusAutoUnsupported: '自动探测：Chat Completions',
-        responsesModeTextDisabledHint: '图片专用账号不支持此设置。请启用文本生成（Chat Completions 或 Responses）来配置响应模式。',
         responsesStatusForcedResponses: '已强制 Responses',
         responsesStatusForcedChatCompletions: '已强制 Chat Completions',
         planType: '订阅档位（手动覆盖）',
@@ -823,6 +834,8 @@ export default {
       modelRestriction: '模型限制（可选）',
       modelWhitelist: '模型白名单',
       modelMapping: '模型映射',
+      fromModel: '请求模型',
+      toModel: '目标模型',
       selectAllowedModels: '选择允许的模型。留空则支持所有模型。',
       mapRequestModels: '将请求模型映射到实际模型。左边是请求的模型，右边是发送到 API 的实际模型。',
       selectedModels: '已选择 {count} 个模型',
@@ -843,7 +856,8 @@ export default {
       syncUpstreamModelsEmpty: '上游没有返回可同步的模型',
       syncUpstreamModelsFailed: '同步上游模型失败',
       syncUpstreamModelsError: '同步上游模型失败：{message}',
-      syncUpstreamModelsMetadataIncomplete: '模型 ID 已同步，但能力元数据不完整，能力信息未更新。',
+      syncUpstreamModelsMetadataIncomplete: '模型 ID 已同步，但未能更新任何能力元数据。',
+      syncUpstreamModelsMetadataPartial: '已更新部分模型的能力元数据；其余模型能力仍不完整。',
       clearAllModels: '清除所有模型',
       customModelName: '自定义模型名称',
       enterCustomModelName: '输入自定义模型名称',
